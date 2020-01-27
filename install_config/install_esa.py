@@ -12,7 +12,7 @@ import os
 subprocess.check_call([sys.executable, '-m', 'pip', 'uninstall', '-y', 'esa'])
 
 # Move into the ESA repo.
-os.chdir('../esa')
+os.chdir('../../esa')
 
 # Install.
 subprocess.check_call([sys.executable, '-m', 'pip', 'install', '.'])

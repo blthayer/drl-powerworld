@@ -13,7 +13,7 @@ subprocess.check_call([sys.executable, '-m', 'pip', 'uninstall', '-y',
                        'gym_powerworld'])
 
 # Move into the baselines repo.
-os.chdir('../gym-powerworld')
+os.chdir('../../gym-powerworld')
 
 # Install.
 subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-e', '.'])

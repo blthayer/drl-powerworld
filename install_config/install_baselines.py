@@ -13,7 +13,7 @@ subprocess.check_call([sys.executable, '-m', 'pip', 'uninstall', '-y',
                        'baselines'])
 
 # Move into the baselines repo.
-os.chdir('../baselines')
+os.chdir('../../baselines')
 
 # Install.
 subprocess.check_call([sys.executable, '-m', 'pip', 'install', '.'])
