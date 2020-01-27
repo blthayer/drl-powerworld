@@ -1,0 +1,6 @@
+# Baselines hasn't finalized the switch to tensorflow 2.0, so we'll
+# use the final 1.x release, which included GPU support.
+# https://www.tensorflow.org/install/pip
+tensorflow==1.15
+# Simply use the latest gym from PyPi. Include atari for testing.
+gym[atari]
