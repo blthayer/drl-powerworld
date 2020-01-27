@@ -11,3 +11,9 @@ repository at commit [5540b2704450acb87fee7f57f6766a8bea419f06](https://github.c
 - contour.axd
 - IEEE 14 bus.axd
 - IEEE 14 bus condensers.PWB
+
+The .axd files were generated via the PowerWorld UI, and are needed for
+visualizing the environment. The "condensers" file has the high and low 
+MW limits for generators at buses 3, 6, and 8 set to 0 in order to
+both replicate what the original case is supposed to be as well as 
+replicate how the GridMind team handled the case.
