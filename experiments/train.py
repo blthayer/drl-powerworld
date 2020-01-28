@@ -158,20 +158,21 @@ def gridmind_reproduce():
     with open(info_file, 'w') as f:
         f.write(s)
 
-    # Render a few scenarios. Start by resetting the log (which will
-    # also flush the log).
+    # Run through several "test" scenarios without training. Uncomment
+    # the "render" lines to save images and display them.
+    # Start by resetting the log (which will also flush the log).
     env.reset_log(new_file=test_logfile)
 
-    for _ in range(1000):
+    for _ in range(2000):
         obs = env.reset()
         done = False
 
         while not done:
-            env.render()
+            # env.render()
             obs, rew, done, _ = env.step(act(obs[None])[0])
 
         # Render again at the end.
-        env.render()
+        # env.render()
 
     # Close the environment (which will flush the log).
     env.close()
