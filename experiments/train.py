@@ -1,8 +1,10 @@
+import os
+# Disable GPU.
+# os.environ['CUDA_VISIBLE_DEVICES'] = ""
 import gym
 # Must import gym_powerworld for the environments to get registered.
 import gym_powerworld
 from baselines import deepq
-import os
 import logging
 import numpy as np
 import time
