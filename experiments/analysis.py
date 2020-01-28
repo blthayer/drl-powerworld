@@ -7,17 +7,19 @@ import matplotlib.pyplot as plt
 
 
 def main():
-    df = pd.read_csv(
+    df_train = pd.read_csv(
         os.path.join(THIS_DIR, 'gridmind_reproduce', 'log_train.csv'))
+    df_test = pd.read_csv(
+        os.path.join(THIS_DIR, 'gridmind_reproduce', 'log_test.csv'))
 
     # "line" graph for action_taken.
     # Relatively useless
     # plt.plot(df['action_taken'])
 
     # "bar" graph of all actions
-    action_count = df['action_taken'].value_counts(
+    action_count = df_test['action_taken'].value_counts(
         normalize=False, sort=False, ascending=False, dropna=True)
-    action_count_norm = df['action_taken'].value_counts(
+    action_count_norm = df_test['action_taken'].value_counts(
         normalize=True, sort=True, ascending=False, dropna=True
     )
     # Still have to sort it? Fine.

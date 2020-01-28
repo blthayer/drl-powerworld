@@ -4,6 +4,7 @@ import os
 import gym
 # Must import gym_powerworld for the environments to get registered.
 import gym_powerworld
+# noinspection PyPackageRequirements
 from baselines import deepq
 import logging
 import numpy as np
@@ -18,8 +19,8 @@ from constants import THIS_DIR, IEEE_14_PWB, IEEE_14_PWB_CONDENSERS, \
 
 def gridmind_callback(lcl, _glb) -> bool:
     """
-    Stop training if the agent is "one-shotting" 98 of 100 episodes,
-    and "two-shotting" the remaining 2.
+    Stop training if the agent is "one-shotting" 99 of 100 episodes,
+    and "two-shotting" the remaining 1.
 
     A single action episode will get a reward of 200 (100 for all
     voltages being in bounds plus an end of episode reward of 100).
@@ -31,7 +32,7 @@ def gridmind_callback(lcl, _glb) -> bool:
     reward of 100. The end of episode reward is then (100 - 50) / 2
     = 25. The total episode reward is then 75.
 
-    So, the average should be (98 * 200) + (2 * 75) / 100 = 197.5.
+    So, the average should be (99 * 200) + (1 * 75) / 100 = 198.75.
 
     Alo stop training if we've hit 10,000 episodes, as that's what the
     GridMind team trained to. We're using a different neural net, so
@@ -47,7 +48,7 @@ def gridmind_callback(lcl, _glb) -> bool:
     # gone through.
     num_ep = len(lcl['episode_rewards'])
 
-    if (avg_100 >= 197.5) or (num_ep >= 10000):
+    if (avg_100 >= 198.75) or (num_ep >= 10000):
         # Terminate training.
         print('Terminating training since either the 100 episode average '
               'reward has exceeded 197.5 or we have exceeded 10,000 episodes.')
@@ -169,7 +170,8 @@ def gridmind_reproduce():
 
         while not done:
             # env.render()
-            obs, rew, done, _ = env.step(act(obs[None])[0])
+            obs, rew, done, _ = env.step(
+                act(obs[None], stochastic=False, update_eps=-1)[0])
 
         # Render again at the end.
         # env.render()
