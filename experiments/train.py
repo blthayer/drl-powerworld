@@ -136,8 +136,8 @@ def gridmind_reproduce():
         prioritized_replay_eps=1e-6,
         param_noise=False,
         load_path=None,
-        # Checkpoint more frequently (default is 10000).
-        checkpoint_freq=1000,
+        # Don't checkpoint - use our callback to stop training.
+        checkpoint_freq=None,
         # Use prioritized replay.
         prioritized_replay=True,
         # Use our callback.
