@@ -5,3 +5,5 @@ tensorflow==1.15
 # Simply use the latest gym from PyPi. Include atari for testing.
 gym[atari]
 numpy
+pandas>=0.24
+matplotlib

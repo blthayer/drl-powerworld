@@ -64,7 +64,7 @@ def gridmind_reproduce():
     """
     # Directories and files.
     # TODO: Put images on the SSD so it runs faster.
-    out_dir = os.path.join(THIS_DIR, 'gridmind_reproduce')
+    out_dir = os.path.join(THIS_DIR, 'gridmind_tmp')
     image_dir = os.path.join(out_dir, 'images')
     train_logfile = os.path.join(out_dir, 'log_train.csv')
     test_logfile = os.path.join(out_dir, 'log_test.csv')
@@ -170,6 +170,9 @@ def gridmind_reproduce():
 
         # Render again at the end.
         env.render()
+
+    # Close the environment (which will flush the log).
+    env.close()
 
 
 if __name__ == '__main__':
