@@ -66,7 +66,7 @@ def gridmind_reproduce():
     """
     # Directories and files.
     # TODO: Put images on the SSD so it runs faster.
-    out_dir = os.path.join(THIS_DIR, 'gridmind_tmp')
+    out_dir = os.path.join(THIS_DIR, 'gridmind_reproduce')
     image_dir = os.path.join(out_dir, 'images')
     train_logfile = os.path.join(out_dir, 'log_train.csv')
     test_logfile = os.path.join(out_dir, 'log_test.csv')
