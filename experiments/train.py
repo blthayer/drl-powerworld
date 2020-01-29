@@ -6,16 +6,91 @@ import gym
 # noinspection PyUnresolvedReferences
 import gym_powerworld
 # noinspection PyPackageRequirements
-from baselines import deepq
+# from baselines import deepq
 import logging
 import numpy as np
 import time
 import tensorflow as tf
 import shutil
+from copy import deepcopy
 
 # noinspection PyUnresolvedReferences,PyPackageRequirements
 from constants import THIS_DIR, IEEE_14_PWB, IEEE_14_PWB_CONDENSERS, \
     IEEE_14_ONELINE_AXD, IEEE_14_CONTOUR_AXD
+
+# Dictionary of GridMind environment inputs.
+GRIDMIND_DICT = dict(
+    pwb_path=IEEE_14_PWB_CONDENSERS,
+    # Create 20000 scenarios, though we likely won't use
+    # them all.
+    num_scenarios=20000,
+    # GridMind team did loading from 80% to 120%
+    max_load_factor=1.2, min_load_factor=0.8,
+    # All loads were always on, and no power factors were
+    # changed.
+    lead_pf_probability=None, load_on_probability=None,
+    # Five voltage bins: [0.95, 0.975, 1.0, 1.025, 1.05]
+    num_gen_voltage_bins=5,
+    gen_voltage_range=(0.95, 1.05),
+    log_level=logging.INFO,
+    # Use the same reward values.
+    rewards=dict(normal=100, violation=-50, diverged=-100),
+    # Use Numpy float32.
+    dtype=np.float32,
+    # 0.95-1.05 is the "good" voltage range.
+    low_v=0.95, high_v=1.05,
+    # For later visualization:
+    oneline_axd=IEEE_14_ONELINE_AXD,
+    contour_axd=IEEE_14_CONTOUR_AXD,
+    # Use a really small render interval so the "testing"
+    # scenarios will go by quickly.
+    render_interval=1e-9,
+    # .csv logging:
+    log_buffer=10000,
+    # The following fields should be added in the function:
+    # seed=seed,
+    # image_dir=image_dir,
+    # csv_logfile=train_logfile,
+)
+
+BASELINES_DICT = dict(
+    network='mlp',
+    # Use default learning rate.
+    lr=5e-4,
+    # Would like to run for 10,000 episodes. We'll set the total
+    # time steps to a large number and use the callback to terminate
+    # training.
+    total_timesteps=100000,
+    # Defaults:
+    buffer_size=50000,
+    exploration_fraction=0.1,
+    exploration_final_eps=0.02,
+    train_freq=1,
+    batch_size=32,
+    print_freq=100,
+    checkpoint_path=None,
+    learning_starts=1000,
+    gamma=1.0,
+    target_network_update_freq=500,
+    prioritized_replay_alpha=0.6,
+    prioritized_replay_beta0=0.4,
+    prioritized_replay_beta_iters=None,
+    prioritized_replay_eps=1e-6,
+    param_noise=False,
+    load_path=None,
+    # Don't checkpoint - use our callback to stop training.
+    checkpoint_freq=None,
+    # Use prioritized replay.
+    prioritized_replay=True,
+    # Modify inputs to the neural network. Since the output
+    # layer is large (5^5 = 3125), the default 64 node layers
+    # are probably a bit small. Also, why is tanh the default?
+    num_layers=2, num_hidden=128, activation=tf.nn.relu,
+    # Update the following:
+    # seed=seed,
+    # env=env,
+    # callback=gridmind_callback,
+)
 
 
 def gridmind_callback(lcl, _glb) -> bool:
@@ -66,85 +141,48 @@ def gridmind_reproduce(out_dir, seed):
     Use the "condensers" case because it closely represents the case
     they used.
     """
+    # To avoid forking the baselines repository, we're going to hack
+    # it and import it each time. Multiple calls to "learn" without this
+    # hack result in the following error:
+    #
+    # ValueError: Variable deepq/eps already exists, disallowed. Did you
+    # mean to set reuse=True or reuse=tf.AUTO_REUSE in VarScope?
+    # Originally defined at:
+    # ...
+    # noinspection PyPackageRequirements
+    from baselines import deepq
 
     # TODO: Put images on the SSD so it runs faster.
+    # Files and such.
     image_dir = os.path.join(out_dir, 'images')
     train_logfile = os.path.join(out_dir, 'log_train.csv')
     test_logfile = os.path.join(out_dir, 'log_test.csv')
     model_file = os.path.join(out_dir, 'gridmind_reproduce.pkl')
     info_file = os.path.join(out_dir, 'info.txt')
 
-    env = gym.make('powerworld-gridmind-env-v0',
-                   pwb_path=IEEE_14_PWB_CONDENSERS,
-                   # Create 20000 scenarios, though we likely won't use
-                   # them all.
-                   num_scenarios=20000,
-                   # GridMind team did loading from 80% to 120%
-                   max_load_factor=1.2, min_load_factor=0.8,
-                   # All loads were always on, and no power factors were
-                   # changed.
-                   lead_pf_probability=None, load_on_probability=None,
-                   # Five voltage bins: [0.95, 0.975, 1.0, 1.025, 1.05]
-                   num_gen_voltage_bins=5,
-                   gen_voltage_range=(0.95, 1.05),
-                   seed=seed, log_level=logging.INFO,
-                   # Use the same reward values.
-                   rewards=dict(normal=100, violation=-50, diverged=-100),
-                   # Use Numpy float32.
-                   dtype=np.float32,
-                   # 0.95-1.05 is the "good" voltage range.
-                   low_v=0.95, high_v=1.05,
-                   # For later visualization:
-                   oneline_axd=IEEE_14_ONELINE_AXD,
-                   contour_axd=IEEE_14_CONTOUR_AXD,
-                   image_dir=image_dir,
-                   # Use a really small render interval so the "testing"
-                   # scenarios will go by quickly.
-                   render_interval=1e-9,
-                   # .csv logging:
-                   log_buffer=10000, csv_logfile=train_logfile
-                   )
+    # Get a copy of the default inputs.
+    input_dict = deepcopy(GRIDMIND_DICT)
 
+    # overwrite the seed, image_dir, and csv_logfile.
+    input_dict['seed'] = seed
+    input_dict['image_dir'] = image_dir
+    input_dict['csv_logfile'] = train_logfile
+
+    # Initialize the environment.
+    env = gym.make('powerworld-gridmind-env-v0', **input_dict)
+
+    # Get a copy of the default inputs for deepq.
+    learn_dict = deepcopy(BASELINES_DICT)
+
+    # Overwrite seed, env, and callback.
+    learn_dict['seed'] = seed
+    learn_dict['env'] = env
+    learn_dict['callback'] = gridmind_callback
+
+    # Learning time.
     t0 = time.time()
     # noinspection PyTypeChecker
-    act = deepq.learn(
-        env=env,
-        network='mlp',
-        seed=seed,
-        # Use default learning rate.
-        lr=5e-4,
-        # Would like to run for 10,000 episodes. We'll set the total
-        # time steps to a large number and use the callback to terminate
-        # training.
-        total_timesteps=100000,
-        # Defaults:
-        buffer_size=50000,
-        exploration_fraction=0.1,
-        exploration_final_eps=0.02,
-        train_freq=1,
-        batch_size=32,
-        print_freq=100,
-        checkpoint_path=None,
-        learning_starts=1000,
-        gamma=1.0,
-        target_network_update_freq=500,
-        prioritized_replay_alpha=0.6,
-        prioritized_replay_beta0=0.4,
-        prioritized_replay_beta_iters=None,
-        prioritized_replay_eps=1e-6,
-        param_noise=False,
-        load_path=None,
-        # Don't checkpoint - use our callback to stop training.
-        checkpoint_freq=None,
-        # Use prioritized replay.
-        prioritized_replay=True,
-        # Use our callback.
-        callback=gridmind_callback,
-        # Modify inputs to the neural network. Since the output
-        # layer is large (5^5 = 3125), the default 64 node layers
-        # are probably a bit small. Also, why is tanh the default?
-        num_layers=2, num_hidden=128, activation=tf.nn.relu,
-    )
+    act = deepq.learn(**learn_dict)
     t1 = time.time()
 
     print('All done, saving to file.')
@@ -186,7 +224,7 @@ def gridmind_reproduce_loop(runs):
 
         try:
             os.mkdir(tmp_dir)
-        except FileNotFoundError:
+        except FileExistsError:
             # Delete the directory if it's present, and remake it.
             shutil.rmtree(tmp_dir)
             os.mkdir(tmp_dir)
