@@ -32,4 +32,3 @@ obs_high_v = env.reset()
 
 print(f'80% loading. Min voltage: {obs_low_v.min():.3f}, Max voltage: {obs_low_v.max():.3f}')
 print(f'120% loading. Min voltage: {obs_high_v.min():.3fe}, Max voltage: {obs_high_v.max():.3f}')
-pass
