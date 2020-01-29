@@ -3,6 +3,7 @@ import os
 # os.environ['CUDA_VISIBLE_DEVICES'] = ""
 import gym
 # Must import gym_powerworld for the environments to get registered.
+# noinspection PyUnresolvedReferences
 import gym_powerworld
 # noinspection PyPackageRequirements
 from baselines import deepq
@@ -10,7 +11,7 @@ import logging
 import numpy as np
 import time
 import tensorflow as tf
-import sys
+import shutil
 
 # noinspection PyUnresolvedReferences,PyPackageRequirements
 from constants import THIS_DIR, IEEE_14_PWB, IEEE_14_PWB_CONDENSERS, \
@@ -58,24 +59,20 @@ def gridmind_callback(lcl, _glb) -> bool:
         return False
 
 
-def gridmind_reproduce():
+def gridmind_reproduce(out_dir, seed):
     """Use this function to take a shot at replicating the GridMind
     paper: https://arxiv.org/abs/1904.10597
 
     Use the "condensers" case because it closely represents the case
     they used.
     """
-    # Directories and files.
+
     # TODO: Put images on the SSD so it runs faster.
-    out_dir = os.path.join(THIS_DIR, 'gridmind_reproduce')
     image_dir = os.path.join(out_dir, 'images')
     train_logfile = os.path.join(out_dir, 'log_train.csv')
     test_logfile = os.path.join(out_dir, 'log_test.csv')
     model_file = os.path.join(out_dir, 'gridmind_reproduce.pkl')
     info_file = os.path.join(out_dir, 'info.txt')
-
-    # Seeding.
-    seed = 42
 
     env = gym.make('powerworld-gridmind-env-v0',
                    pwb_path=IEEE_14_PWB_CONDENSERS,
@@ -180,5 +177,22 @@ def gridmind_reproduce():
     env.close()
 
 
+def gridmind_reproduce_loop(runs):
+    """Run the gridmind_reproduce function in a loop."""
+    base_dir = os.path.join(THIS_DIR, 'gridmind_reproduce')
+
+    for i in range(runs):
+        tmp_dir = os.path.join(base_dir, f'run_{i}')
+
+        try:
+            os.mkdir(tmp_dir)
+        except FileNotFoundError:
+            # Delete the directory if it's present, and remake it.
+            shutil.rmtree(tmp_dir)
+            os.mkdir(tmp_dir)
+
+        gridmind_reproduce(out_dir=tmp_dir, seed=i)
+
+
 if __name__ == '__main__':
-    gridmind_reproduce()
+    gridmind_reproduce_loop(10)
