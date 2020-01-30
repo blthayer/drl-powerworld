@@ -7,3 +7,4 @@ gym[atari]
 numpy
 pandas>=0.24
 matplotlib
+stable-baselines

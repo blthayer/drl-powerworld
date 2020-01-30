@@ -5,14 +5,16 @@ import gym
 # Must import gym_powerworld for the environments to get registered.
 # noinspection PyUnresolvedReferences
 import gym_powerworld
-# noinspection PyPackageRequirements
-from baselines import deepq
 import logging
 import numpy as np
 import time
 import tensorflow as tf
 import shutil
 from copy import deepcopy
+
+from stable_baselines.common.vec_env import DummyVecEnv
+from stable_baselines.deepq.policies import MlpPolicy
+from stable_baselines import DQN
 
 # noinspection PyUnresolvedReferences,PyPackageRequirements
 from constants import THIS_DIR, IEEE_14_PWB, IEEE_14_PWB_CONDENSERS, \
@@ -54,42 +56,36 @@ GRIDMIND_DICT = dict(
 )
 
 BASELINES_DICT = dict(
-    network='mlp',
-    # Use default learning rate.
-    lr=5e-4,
-    # Would like to run for 10,000 episodes. We'll set the total
-    # time steps to a large number and use the callback to terminate
-    # training.
-    total_timesteps=100000,
-    # Defaults:
+    # Use an MlpPolicy, which defaults to two 64 node layers.
+    policy=MlpPolicy,
+    # The following are all defaults:
+    gamma=0.99,
+    learning_rate=5e-4,
     buffer_size=50000,
-    exploration_fraction=0.1,
     exploration_final_eps=0.02,
+    exploration_initial_eps=1.0,
     train_freq=1,
     batch_size=32,
-    print_freq=100,
-    checkpoint_path=None,
+    double_q=True,
     learning_starts=1000,
-    gamma=1.0,
     target_network_update_freq=500,
     prioritized_replay_alpha=0.6,
     prioritized_replay_beta0=0.4,
     prioritized_replay_beta_iters=None,
     prioritized_replay_eps=1e-6,
     param_noise=False,
-    load_path=None,
-    # Don't checkpoint - use our callback to stop training.
-    checkpoint_freq=None,
-    # Use prioritized replay.
+    tensorboard_log=None,
+    _init_setup_model=True,
+    full_tensorboard_log=False,
+    n_cpu_tf_sess=None,
+    # Not default:
+    verbose=1,
     prioritized_replay=True,
-    # Modify inputs to the neural network. Since the output
-    # layer is large (5^5 = 3125), the default 64 node layers
-    # are probably a bit small. Also, why is tanh the default?
-    num_layers=2, num_hidden=128, activation=tf.nn.relu,
+    # Have exploration linearly decay based on total_timesteps.
+    exploration_fraction=1.0,
     # Update the following:
-    # seed=seed,
-    # env=env,
-    # callback=gridmind_callback,
+    # seed=seed
+    # env=env
 )
 
 
@@ -128,10 +124,10 @@ def gridmind_callback(lcl, _glb) -> bool:
         # Terminate training.
         print('Terminating training since either the 100 episode average '
               'reward has exceeded 197.5 or we have exceeded 10,000 episodes.')
-        return True
+        return False
     else:
         # Don't terminate training.
-        return False
+        return True
 
 
 def gridmind_reproduce(out_dir, seed):
@@ -161,22 +157,25 @@ def gridmind_reproduce(out_dir, seed):
     # Initialize the environment.
     env = gym.make('powerworld-gridmind-env-v0', **input_dict)
 
-    # Get a copy of the default inputs for deepq.
+    # Get a copy of the default inputs for dqn.
     learn_dict = deepcopy(BASELINES_DICT)
 
-    # Overwrite seed, env, and callback.
+    # Overwrite seed and env
     learn_dict['seed'] = seed
     learn_dict['env'] = env
-    learn_dict['callback'] = gridmind_callback
+
+    # Initialize.
+    model = DQN(**learn_dict)
 
     # Learning time.
     t0 = time.time()
     # noinspection PyTypeChecker
-    act = deepq.learn(**learn_dict)
+    model.learn(total_timesteps=10000, callback=gridmind_callback,
+                log_interval=100)
     t1 = time.time()
 
     print('All done, saving to file.')
-    act.save(model_file)
+    model.save(model_file)
 
     # Save info file.
     s = f'Training took {t1-t0:.2f} seconds.\n'
@@ -195,8 +194,7 @@ def gridmind_reproduce(out_dir, seed):
 
         while not done:
             # env.render()
-            obs, rew, done, _ = env.step(
-                act(obs[None], stochastic=False, update_eps=-1)[0])
+            obs, rew, done, _ = env.step(model.predict(obs)[0])
 
         # Render again at the end.
         # env.render()
