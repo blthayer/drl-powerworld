@@ -6,7 +6,7 @@ import gym
 # noinspection PyUnresolvedReferences
 import gym_powerworld
 # noinspection PyPackageRequirements
-# from baselines import deepq
+from baselines import deepq
 import logging
 import numpy as np
 import time
@@ -141,16 +141,6 @@ def gridmind_reproduce(out_dir, seed):
     Use the "condensers" case because it closely represents the case
     they used.
     """
-    # To avoid forking the baselines repository, we're going to hack
-    # it and import it each time. Multiple calls to "learn" without this
-    # hack result in the following error:
-    #
-    # ValueError: Variable deepq/eps already exists, disallowed. Did you
-    # mean to set reuse=True or reuse=tf.AUTO_REUSE in VarScope?
-    # Originally defined at:
-    # ...
-    # noinspection PyPackageRequirements
-    from baselines import deepq
 
     # TODO: Put images on the SSD so it runs faster.
     # Files and such.
