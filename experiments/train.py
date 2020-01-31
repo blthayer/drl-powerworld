@@ -1,6 +1,5 @@
 import os
-# Disable GPU.
-# os.environ['CUDA_VISIBLE_DEVICES'] = ""
+import tensorflow as tf
 import gym
 # Must import gym_powerworld for the environments to get registered.
 # noinspection PyUnresolvedReferences
@@ -8,13 +7,12 @@ import gym_powerworld
 import logging
 import numpy as np
 import time
-import tensorflow as tf
 import shutil
 from copy import deepcopy
-
-from stable_baselines.common.vec_env import DummyVecEnv
-from stable_baselines.deepq.policies import MlpPolicy
+import json
+from stable_baselines.deepq.policies import MlpPolicy, FeedForwardPolicy
 from stable_baselines import DQN
+import argparse
 
 # noinspection PyUnresolvedReferences,PyPackageRequirements
 from constants import THIS_DIR, IEEE_14_PWB, IEEE_14_PWB_CONDENSERS, \
@@ -23,9 +21,6 @@ from constants import THIS_DIR, IEEE_14_PWB, IEEE_14_PWB_CONDENSERS, \
 # Dictionary of GridMind environment inputs.
 GRIDMIND_DICT = dict(
     pwb_path=IEEE_14_PWB_CONDENSERS,
-    # Create 20000 scenarios, though we likely won't use
-    # them all.
-    num_scenarios=20000,
     # GridMind team did loading from 80% to 120%
     max_load_factor=1.2, min_load_factor=0.8,
     # All loads were always on, and no power factors were
@@ -51,13 +46,12 @@ GRIDMIND_DICT = dict(
     log_buffer=10000,
     # The following fields should be added in the function:
     # seed=seed,
+    # num_scenarios=num_scenarios
     # image_dir=image_dir,
     # csv_logfile=train_logfile,
 )
 
 BASELINES_DICT = dict(
-    # Use an MlpPolicy, which defaults to two 64 node layers.
-    policy=MlpPolicy,
     # The following are all defaults:
     gamma=0.99,
     learning_rate=5e-4,
@@ -84,53 +78,41 @@ BASELINES_DICT = dict(
     # Have exploration linearly decay based on total_timesteps.
     exploration_fraction=1.0,
     # Update the following:
+    # policy=policy
     # seed=seed
     # env=env
 )
 
 
-def gridmind_callback(lcl, _glb) -> bool:
-    """
-    Stop training if the agent is "one-shotting" 99 of 100 episodes,
-    and "two-shotting" the remaining 1.
+def callback_factory(max_episodes, average_reward):
 
-    A single action episode will get a reward of 200 (100 for all
-    voltages being in bounds plus an end of episode reward of 100).
+    def callback(lcl, _glb) -> bool:
+        """
+        :param lcl: locals() inside deepq.learn
+        :param _glb: globals() inside deepq.learn
+        """
+        # Compute the average of the last 100 episodes.
+        avg_100 = sum(lcl['episode_rewards'][-101:-1]) / 100
 
-    For a two action episode, assume after the first action, there
-    is at least one bus in the "violation" zone and none in the
-    "diverged" zone. This results in a "reward" of -50. Assume the
-    second action puts all buses in the good zone, and thus gets a
-    reward of 100. The end of episode reward is then (100 - 50) / 2
-    = 25. The total episode reward is then 75.
+        # The length of 'episode_rewards' indicates how many episodes we've
+        # gone through.
+        num_ep = len(lcl['episode_rewards'])
 
-    So, the average should be (99 * 200) + (1 * 75) / 100 = 198.75.
+        if (avg_100 >= average_reward) or (num_ep >= max_episodes):
+            # Terminate training.
+            print('Terminating training since either the 100 episode average '
+                  f'reward has exceeded {average_reward} or we have exceeded '
+                  f'{max_episodes} episodes.')
+            return False
+        else:
+            # Don't terminate training.
+            return True
 
-    Alo stop training if we've hit 10,000 episodes, as that's what the
-    GridMind team trained to. We're using a different neural net, so
-    this may or may not be effective.
-
-    :param lcl: locals() inside deepq.learn
-    :param _glb: globals() inside deepq.learn
-    """
-    # Compute the average of the last 100 episodes.
-    avg_100 = sum(lcl['episode_rewards'][-101:-1]) / 100
-
-    # The length of 'episode_rewards' indicates how many episodes we've
-    # gone through.
-    num_ep = len(lcl['episode_rewards'])
-
-    if (avg_100 >= 198.75) or (num_ep >= 10000):
-        # Terminate training.
-        print('Terminating training since either the 100 episode average '
-              'reward has exceeded 197.5 or we have exceeded 10,000 episodes.')
-        return False
-    else:
-        # Don't terminate training.
-        return True
+    return callback
 
 
-def learn_and_test(out_dir, seed, env_name):
+def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
+                   callback, policy):
     """Use this function to take a shot at replicating the GridMind
     paper: https://arxiv.org/abs/1904.10597
 
@@ -147,31 +129,44 @@ def learn_and_test(out_dir, seed, env_name):
     info_file = os.path.join(out_dir, 'info.txt')
 
     # Get a copy of the default inputs.
-    input_dict = deepcopy(GRIDMIND_DICT)
+    env_dict = deepcopy(GRIDMIND_DICT)
 
     # overwrite the seed, image_dir, and csv_logfile.
-    input_dict['seed'] = seed
-    input_dict['image_dir'] = image_dir
-    input_dict['csv_logfile'] = train_logfile
+    env_dict['seed'] = seed
+    env_dict['image_dir'] = image_dir
+    env_dict['csv_logfile'] = train_logfile
+    env_dict['num_scenarios'] = num_scenarios
 
     # Initialize the environment.
-    env = gym.make(env_name, **input_dict)
+    env = gym.make(env_name, **env_dict)
 
     # Get a copy of the default inputs for dqn.
-    learn_dict = deepcopy(BASELINES_DICT)
+    init_dict = deepcopy(BASELINES_DICT)
+
+    # Log inputs.
+    env_dict.pop('dtype')
+    with open(os.path.join(out_dir, 'env_input.json'), 'w') as f:
+        json.dump(env_dict, f)
 
     # Overwrite seed and env
-    learn_dict['seed'] = seed
-    learn_dict['env'] = env
+    init_dict['seed'] = seed
+    init_dict['env'] = env
+    init_dict['policy'] = policy
 
     # Initialize.
-    model = DQN(**learn_dict)
+    model = DQN(**init_dict)
+
+    # Log inputs.
+    init_dict.pop('policy')
+    init_dict.pop('env')
+    with open(os.path.join(out_dir, 'dqn_input.json'), 'w') as f:
+        json.dump(init_dict, f)
 
     # Learning time.
     t0 = time.time()
-    # noinspection PyTypeChecker
-    model.learn(total_timesteps=10000, callback=gridmind_callback,
-                log_interval=100)
+    learn_dict = {'total_timesteps': num_time_steps, 'callback': callback,
+                  'log_interval': 100}
+    model.learn(**learn_dict)
     t1 = time.time()
 
     print('All done, saving to file.')
@@ -203,7 +198,8 @@ def learn_and_test(out_dir, seed, env_name):
     env.close()
 
 
-def loop(out_dir, env_name, runs):
+def loop(out_dir, env_name, runs, hidden_list, num_scenarios,
+         max_episodes, avg_reward, num_time_steps):
     """Run the gridmind_reproduce function in a loop."""
     base_dir = os.path.join(THIS_DIR, out_dir)
 
@@ -212,6 +208,18 @@ def loop(out_dir, env_name, runs):
         os.mkdir(base_dir)
     except FileExistsError:
         pass
+
+    # Create the callback.
+    callback = callback_factory(max_episodes=max_episodes,
+                                average_reward=avg_reward)
+
+    # Create a custom policy using the specified layers.
+    class CustomPolicy(FeedForwardPolicy):
+        def __init__(self, *args, **kwargs):
+            # noinspection PyUnresolvedReferences
+            super(CustomPolicy, self).__init__(
+                *args, **kwargs, layers=hidden_list, layer_norm=False,
+                feature_extraction='mlp', act_fun=tf.nn.relu)
 
     # Loop over the runs.
     for i in range(runs):
@@ -227,15 +235,50 @@ def loop(out_dir, env_name, runs):
             os.mkdir(tmp_dir)
 
         # Do the learning and testing.
-        learn_and_test(out_dir=tmp_dir, seed=i, env_name=env_name)
+        learn_and_test(
+            out_dir=tmp_dir, seed=i, env_name=env_name,
+            num_scenarios=num_scenarios, num_time_steps=num_time_steps,
+            callback=callback, policy=CustomPolicy)
 
 
 if __name__ == '__main__':
-    # Reproduce GridMind
-    # TODO: change dir.
-    # loop(out_dir='gridmind_tmp', env_name='powerworld-gridmind-env-v0',
-    #      runs=10)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('out_dir', help='Relative output directory.',
+                        type=str)
+    parser.add_argument(
+        'env', help='Gym PowerWorld environment to use.', type=str,
+        choices=['powerworld-gridmind-env-v0',
+                 'powerworld-gridmind-contingencies-env-v0'])
+    parser.add_argument('--num_runs', help='Number of times to train.',
+                        type=int, default=1)
+    # https://stackoverflow.com/a/24866869/11052174
+    parser.add_argument('--hidden_list',
+                        type=lambda s: [int(item) for item in s.split(',')],
+                        default=[64, 128],
+                        help='List of hidden layer sizes, e.g. "64,128"')
+    parser.add_argument(
+        '--num_scenarios', type=int, default=50000,
+        help='Number of scenarios for the environment to create.',
+    )
+    parser.add_argument(
+        '--max_episodes', type=int, default=45000,
+        help='Maximum number of training episodes to run before stopping.')
+    parser.add_argument(
+        '--avg_reward', type=float, default=198.75,
+        help='Stop training when the 100 episode average has hit this reward.'
+    )
+    parser.add_argument(
+        '--num_time_steps', type=int, default=100000,
+        help=('Number of time steps to run training (unless terminated early '
+              'by hitting max_episodes or achieving avg_reward). Note that the'
+              ' exploration rate is currently set to decay linearly from '
+              'start to num_time_steps.'))
 
-    # Run GridMind with contingencies.
-    loop(out_dir='gridmind_contingincies',
-         env_name='powerworld-gridmind-contingencies-env-v0', runs=10)
+    # Parse the arguments.
+    args_in = parser.parse_args()
+
+    # Run.
+    loop(out_dir=args_in.out_dir, env_name=args_in.env, runs=args_in.num_runs,
+         hidden_list=args_in.hidden_list, num_scenarios=args_in.num_scenarios,
+         max_episodes=args_in.max_episodes, avg_reward=args_in.avg_reward,
+         num_time_steps=args_in.num_time_steps)
