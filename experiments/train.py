@@ -130,7 +130,7 @@ def gridmind_callback(lcl, _glb) -> bool:
         return True
 
 
-def gridmind_reproduce(out_dir, seed):
+def learn_and_test(out_dir, seed, env_name):
     """Use this function to take a shot at replicating the GridMind
     paper: https://arxiv.org/abs/1904.10597
 
@@ -155,7 +155,7 @@ def gridmind_reproduce(out_dir, seed):
     input_dict['csv_logfile'] = train_logfile
 
     # Initialize the environment.
-    env = gym.make('powerworld-gridmind-env-v0', **input_dict)
+    env = gym.make(env_name, **input_dict)
 
     # Get a copy of the default inputs for dqn.
     learn_dict = deepcopy(BASELINES_DICT)
@@ -203,13 +203,22 @@ def gridmind_reproduce(out_dir, seed):
     env.close()
 
 
-def gridmind_reproduce_loop(runs):
+def loop(out_dir, env_name, runs):
     """Run the gridmind_reproduce function in a loop."""
-    base_dir = os.path.join(THIS_DIR, 'gridmind_reproduce')
+    base_dir = os.path.join(THIS_DIR, out_dir)
 
+    # Make the directory. Don't worry if it exists already.
+    try:
+        os.mkdir(base_dir)
+    except FileExistsError:
+        pass
+
+    # Loop over the runs.
     for i in range(runs):
+        # Create name of directory for this run.
         tmp_dir = os.path.join(base_dir, f'run_{i}')
 
+        # Attempt to create the directory, otherwise, delete.
         try:
             os.mkdir(tmp_dir)
         except FileExistsError:
@@ -217,8 +226,16 @@ def gridmind_reproduce_loop(runs):
             shutil.rmtree(tmp_dir)
             os.mkdir(tmp_dir)
 
-        gridmind_reproduce(out_dir=tmp_dir, seed=i)
+        # Do the learning and testing.
+        learn_and_test(out_dir=tmp_dir, seed=i, env_name=env_name)
 
 
 if __name__ == '__main__':
-    gridmind_reproduce_loop(10)
+    # Reproduce GridMind
+    # TODO: change dir.
+    # loop(out_dir='gridmind_tmp', env_name='powerworld-gridmind-env-v0',
+    #      runs=10)
+
+    # Run GridMind with contingencies.
+    loop(out_dir='gridmind_contingincies',
+         env_name='powerworld-gridmind-contingencies-env-v0', runs=10)

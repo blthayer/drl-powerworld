@@ -4,36 +4,86 @@ import pandas as pd
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+import re
 
 
-def main():
-    df_train = pd.read_csv(
-        os.path.join(THIS_DIR, 'gridmind_reproduce', 'log_train.csv'))
-    df_test = pd.read_csv(
-        os.path.join(THIS_DIR, 'gridmind_reproduce', 'log_test.csv'))
+def loop():
+    num_runs = 10
+    num_episodes = np.zeros(num_runs)
+    train_time = np.zeros(num_runs)
+    aced = np.zeros(num_runs)
+
+    for i in range(10):
+        ep, t, ace = main(i)
+        num_episodes[i] = ep
+        train_time[i] = t
+        aced[i] = ace
+
+    print('*' * 80)
+    print('Overall statistics:')
+    print(f'Mean training time: {train_time.mean()}')
+    print(f'Mean number of training episodes: {num_episodes.mean()}')
+    print(f'Mean testing episodes "aced": {aced.mean()}')
+
+    fig, ax = plt.subplots()
+    ax.boxplot()
+
+
+def main(run_num):
+    print('*' * 80)
+    print(f'RUN {run_num}')
+    print('')
+
+    base_dir = os.path.join(THIS_DIR, 'gridmind_reproduce')
+    run_dir = os.path.join(base_dir, f'run_{run_num}')
+
+    df_train = pd.read_csv(os.path.join(run_dir, 'log_train.csv'))
+    df_test = pd.read_csv(os.path.join(run_dir, 'log_test.csv'))
+
+    # Read the info file.
+    with open(os.path.join(run_dir, 'info.txt'), 'r') as f:
+        s = f.read()
+
+    # Extract the run time.
+    m = re.match('(?:Training took\s)(.+)(?:\sseconds.)', s)
+    train_time = float(m.group(1))
 
     # Let's compute and plot average rewards over training.
-    episode_rewards = df_train[['episode', 'reward']].groupby('episode').sum()
+    train_episode_rewards = \
+        df_train[['episode', 'reward']].groupby('episode').sum()
+    test_episode_actions = \
+        df_test[['episode', 'reward']].groupby('episode').count()
 
     # Plot all episode rewards.
     fig1, ax1 = plt.subplots()
-    ax1.scatter(x=np.arange(len(episode_rewards)), y=episode_rewards.to_numpy())
+    ax1.scatter(x=np.arange(len(train_episode_rewards)),
+                y=train_episode_rewards.to_numpy())
     ax1.set_title('Total Training Episode Rewards')
     ax1.set_xlabel('Episode Number')
     ax1.set_ylabel('Total Episode Reward')
+    ax1.grid(True, 'both')
+    plt.tight_layout()
+
+    fig1.savefig(os.path.join(run_dir, 'episode_rewards.png'), format='png')
+    fig1.savefig(os.path.join(run_dir, 'episode_rewards.eps'), format='eps')
 
     # Do a rolling average.
-    rolling = episode_rewards.rolling(100).mean().to_numpy()
+    rolling = train_episode_rewards.rolling(100).mean().to_numpy()
     # Get rid of the NaNs at the beginning.
     rolling = rolling[~pd.isna(rolling)]
-    assert len(rolling) == len(episode_rewards) - 99
+    assert len(rolling) == len(train_episode_rewards) - 99
     fig2, ax2 = plt.subplots()
     ax2.scatter(x=np.arange(len(rolling)) + 99, y=rolling)
     # Hard-code the reward cap of 200.
     # ax2.set_ylim([rolling.min(), 200])
     ax2.set_xlabel('Episode Number')
-    ax2.set_ylabel('100 Ep. Avg. Total Ep. Reward')
-    ax2.set_title('100 Episode Sliding Window Average Episode Rewards')
+    ax2.set_ylabel('Average Total Episode Reward')
+    ax2.set_title('100 Episode Average Episode Rewards (Sliding Window)')
+    ax2.grid(True, 'both')
+    plt.tight_layout()
+
+    fig2.savefig(os.path.join(run_dir, 'average_rewards.png'), format='png')
+    fig2.savefig(os.path.join(run_dir, 'average_rewards.eps'), format='eps')
 
     # Get the unique actions taken in testing.
     test_actions = df_test['action_taken'].unique()
@@ -61,25 +111,11 @@ def main():
     print('Description of over voltages in testing set:')
     print(over_voltage.describe())
 
-    pass
-
-    # "line" graph for action_taken.
-    # Relatively useless
-    # plt.plot(df['action_taken'])
-
-    # # "bar" graph of all actions
-    # action_count = df_test['action_taken'].value_counts(
-    #     normalize=False, sort=False, ascending=False, dropna=True)
-    # action_count_norm = df_test['action_taken'].value_counts(
-    #     normalize=True, sort=True, ascending=False, dropna=True
-    # )
-    # # Still have to sort it? Fine.
-    # action_count.sort_index(inplace=True)
-    # # Bar graph.
-    # #
-    # plt.bar(x=action_count.index, height=action_count.to_numpy())
-    plt.show()
+    # Return the number of training episodes, training time, and
+    # number of "aced" test episodes.
+    return train_episode_rewards.shape[0], train_time,\
+        (test_ep_rewards == 200.0).sum()
 
 
 if __name__ == '__main__':
-    main()
+    loop()
