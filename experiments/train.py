@@ -267,7 +267,7 @@ if __name__ == '__main__':
                         default=[64, 64],
                         help='List of hidden layer sizes, e.g. "64,128"')
     parser.add_argument(
-        '--num_scenarios', type=int, default=5e5*3,
+        '--num_scenarios', type=int, default=int(5e5*3),
         help='Number of scenarios for the environment to create.',
     )
     parser.add_argument(
@@ -275,7 +275,7 @@ if __name__ == '__main__':
         help='Stop training when the 100 episode average has hit this reward.'
     )
     parser.add_argument(
-        '--num_time_steps', type=int, default=5e5,
+        '--num_time_steps', type=int, default=int(5e5),
         help=('Number of time steps to run training (unless terminated early '
               'by achieving avg_reward). Note that the exploration rate is '
               'currently set to decay linearly from start to num_time_steps.'))
