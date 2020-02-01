@@ -87,7 +87,7 @@ BASELINES_DICT = dict(
 )
 
 
-def callback_factory(average_reward):
+def callback_factory(average_reward, max_episodes):
 
     def callback(lcl, _glb) -> bool:
         """
@@ -97,10 +97,18 @@ def callback_factory(average_reward):
         # Compute the average of the last 100 episodes.
         avg_100 = sum(lcl['episode_rewards'][-101:-1]) / 100
 
+        # Length indicates how many episodes/scenarios we've gone
+        # through.
+        num_ep = len(lcl['episode_rewards'])
+
         if avg_100 >= average_reward:
             # Terminate training.
             print('Terminating training since either the 100 episode average '
                   f'reward has exceeded {average_reward}.')
+            return False
+        elif num_ep >= max_episodes:
+            # Terminate.
+            print(f'Terminating training since we have hit {num_ep} episodes.')
             return False
         else:
             # Don't terminate training.
@@ -210,7 +218,8 @@ def loop(out_dir, env_name, runs, hidden_list, num_scenarios,
         pass
 
     # Create the callback.
-    callback = callback_factory(average_reward=avg_reward)
+    callback = callback_factory(average_reward=avg_reward,
+                                max_episodes=num_scenarios)
 
     # Create a custom policy using the specified layers.
     class CustomPolicy(FeedForwardPolicy):
