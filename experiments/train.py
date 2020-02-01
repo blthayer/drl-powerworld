@@ -10,7 +10,7 @@ import time
 import shutil
 from copy import deepcopy
 import json
-from stable_baselines.deepq.policies import MlpPolicy, FeedForwardPolicy
+from stable_baselines.deepq.policies import FeedForwardPolicy
 from stable_baselines import DQN
 import argparse
 
@@ -20,7 +20,6 @@ from constants import THIS_DIR, IEEE_14_PWB, IEEE_14_PWB_CONDENSERS, \
 
 # Dictionary of GridMind environment inputs.
 GRIDMIND_DICT = dict(
-    pwb_path=IEEE_14_PWB_CONDENSERS,
     # GridMind team did loading from 80% to 120%
     max_load_factor=1.2, min_load_factor=0.8,
     # All loads were always on, and no power factors were
@@ -45,6 +44,7 @@ GRIDMIND_DICT = dict(
     # .csv logging:
     log_buffer=10000,
     # The following fields should be added in the function:
+    # pwb_path=IEEE_14_PWB_CONDENSERS,
     # seed=seed,
     # num_scenarios=num_scenarios
     # image_dir=image_dir,
@@ -53,10 +53,8 @@ GRIDMIND_DICT = dict(
 
 BASELINES_DICT = dict(
     # The following are all defaults:
-    gamma=0.99,
     learning_rate=5e-4,
     buffer_size=50000,
-    exploration_final_eps=0.02,
     exploration_initial_eps=1.0,
     train_freq=1,
     batch_size=32,
@@ -75,6 +73,11 @@ BASELINES_DICT = dict(
     # Not default:
     verbose=1,
     prioritized_replay=True,
+    # Go all the way down to 1%.
+    exploration_final_eps=0.01,
+    # Set gamma to 1.0, since there are already incentives built-in for
+    # minimizing the number of actions.
+    gamma=1.0,
     # Have exploration linearly decay based on total_timesteps.
     exploration_fraction=1.0,
     # Update the following:
@@ -84,7 +87,7 @@ BASELINES_DICT = dict(
 )
 
 
-def callback_factory(max_episodes, average_reward):
+def callback_factory(average_reward):
 
     def callback(lcl, _glb) -> bool:
         """
@@ -94,15 +97,10 @@ def callback_factory(max_episodes, average_reward):
         # Compute the average of the last 100 episodes.
         avg_100 = sum(lcl['episode_rewards'][-101:-1]) / 100
 
-        # The length of 'episode_rewards' indicates how many episodes we've
-        # gone through.
-        num_ep = len(lcl['episode_rewards'])
-
-        if (avg_100 >= average_reward) or (num_ep >= max_episodes):
+        if avg_100 >= average_reward:
             # Terminate training.
             print('Terminating training since either the 100 episode average '
-                  f'reward has exceeded {average_reward} or we have exceeded '
-                  f'{max_episodes} episodes.')
+                  f'reward has exceeded {average_reward}.')
             return False
         else:
             # Don't terminate training.
@@ -112,7 +110,7 @@ def callback_factory(max_episodes, average_reward):
 
 
 def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
-                   callback, policy):
+                   callback, policy, case):
     """Use this function to take a shot at replicating the GridMind
     paper: https://arxiv.org/abs/1904.10597
 
@@ -132,6 +130,7 @@ def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
     env_dict = deepcopy(GRIDMIND_DICT)
 
     # overwrite the seed, image_dir, and csv_logfile.
+    env_dict['pwb_path'] = case
     env_dict['seed'] = seed
     env_dict['image_dir'] = image_dir
     env_dict['csv_logfile'] = train_logfile
@@ -189,7 +188,8 @@ def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
 
         while not done:
             # env.render()
-            obs, rew, done, _ = env.step(model.predict(obs)[0])
+            obs, rew, done, _ = \
+                env.step(model.predict(obs, deterministic=True)[0])
 
         # Render again at the end.
         # env.render()
@@ -199,7 +199,7 @@ def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
 
 
 def loop(out_dir, env_name, runs, hidden_list, num_scenarios,
-         max_episodes, avg_reward, num_time_steps):
+         avg_reward, num_time_steps, case):
     """Run the gridmind_reproduce function in a loop."""
     base_dir = os.path.join(THIS_DIR, out_dir)
 
@@ -210,8 +210,7 @@ def loop(out_dir, env_name, runs, hidden_list, num_scenarios,
         pass
 
     # Create the callback.
-    callback = callback_factory(max_episodes=max_episodes,
-                                average_reward=avg_reward)
+    callback = callback_factory(average_reward=avg_reward)
 
     # Create a custom policy using the specified layers.
     class CustomPolicy(FeedForwardPolicy):
@@ -238,7 +237,7 @@ def loop(out_dir, env_name, runs, hidden_list, num_scenarios,
         learn_and_test(
             out_dir=tmp_dir, seed=i, env_name=env_name,
             num_scenarios=num_scenarios, num_time_steps=num_time_steps,
-            callback=callback, policy=CustomPolicy)
+            callback=callback, policy=CustomPolicy, case=case)
 
 
 if __name__ == '__main__':
@@ -249,36 +248,41 @@ if __name__ == '__main__':
         'env', help='Gym PowerWorld environment to use.', type=str,
         choices=['powerworld-gridmind-env-v0',
                  'powerworld-gridmind-contingencies-env-v0'])
+    parser.add_argument(
+        'case', help='Case to use.', type=str, choices=['14', '14_condensers'])
     parser.add_argument('--num_runs', help='Number of times to train.',
-                        type=int, default=1)
+                        type=int, default=3)
     # https://stackoverflow.com/a/24866869/11052174
     parser.add_argument('--hidden_list',
                         type=lambda s: [int(item) for item in s.split(',')],
-                        default=[64, 128],
+                        default=[64, 64],
                         help='List of hidden layer sizes, e.g. "64,128"')
     parser.add_argument(
-        '--num_scenarios', type=int, default=50000,
+        '--num_scenarios', type=int, default=5e5*3,
         help='Number of scenarios for the environment to create.',
     )
-    parser.add_argument(
-        '--max_episodes', type=int, default=45000,
-        help='Maximum number of training episodes to run before stopping.')
     parser.add_argument(
         '--avg_reward', type=float, default=198.75,
         help='Stop training when the 100 episode average has hit this reward.'
     )
     parser.add_argument(
-        '--num_time_steps', type=int, default=100000,
+        '--num_time_steps', type=int, default=5e5,
         help=('Number of time steps to run training (unless terminated early '
-              'by hitting max_episodes or achieving avg_reward). Note that the'
-              ' exploration rate is currently set to decay linearly from '
-              'start to num_time_steps.'))
+              'by achieving avg_reward). Note that the exploration rate is '
+              'currently set to decay linearly from start to num_time_steps.'))
 
     # Parse the arguments.
     args_in = parser.parse_args()
 
+    if args_in.case == '14':
+        case_ = IEEE_14_PWB
+    elif args_in.case == '14_condensers':
+        case_ = IEEE_14_PWB_CONDENSERS
+    else:
+        raise UserWarning('What is going on?')
+
     # Run.
     loop(out_dir=args_in.out_dir, env_name=args_in.env, runs=args_in.num_runs,
          hidden_list=args_in.hidden_list, num_scenarios=args_in.num_scenarios,
-         max_episodes=args_in.max_episodes, avg_reward=args_in.avg_reward,
-         num_time_steps=args_in.num_time_steps)
+         avg_reward=args_in.avg_reward, num_time_steps=args_in.num_time_steps,
+         case=case_)
