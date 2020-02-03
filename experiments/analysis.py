@@ -11,8 +11,22 @@ def loop(in_dir):
     sub_dirs = \
         [os.path.basename(f.path) for f in os.scandir(in_dir) if f.is_dir()]
 
-    for this_d in sub_dirs:
-        main(os.path.join(THIS_DIR, in_dir, this_d))
+    pct_success_arr = np.zeros(len(sub_dirs))
+    mean_reward_arr = np.zeros_like(pct_success_arr)
+    num_test_actions_arr = np.zeros_like(pct_success_arr)
+
+    for i, this_d in enumerate(sub_dirs):
+        pct_success, mean_reward, num_test_actions = main(
+            os.path.join(THIS_DIR, in_dir, this_d))
+
+        pct_success_arr[i] = pct_success
+        mean_reward_arr[i] = mean_reward
+        num_test_actions_arr[i] = num_test_actions
+
+    # It's okay to take means of means since all our tests have the
+    # same number of samples.
+    return pct_success_arr.mean(), mean_reward_arr.mean(), \
+        num_test_actions_arr.mean()
 
 
 def _get_rewards_actions(df):
@@ -27,6 +41,8 @@ def plot_training(df, exp_dir):
                        window=True)
     _plot_helper_train(s_in=actions, save_dir=exp_dir, term='Action',
                        window=True)
+
+    return rewards, actions
 
 
 def _plot_helper_train(s_in, save_dir, term, window=True):
@@ -72,6 +88,8 @@ def plot_testing(df, exp_dir):
     _plot_helper_test(s_in=reward_s, save_dir=exp_dir, term='Reward')
     _plot_helper_test(s_in=action_s, save_dir=exp_dir,
                       term='Action Count')
+
+    return rewards, actions
 
 
 def _plot_helper_test(s_in, save_dir, term):
@@ -158,13 +176,13 @@ def main(run_dir):
     df_train = pd.read_csv(os.path.join(run_dir, 'log_train.csv'))
 
     # Plot training rewards.
-    plot_training(df=df_train, exp_dir=run_dir)
+    train_rewards, train_actions = plot_training(df=df_train, exp_dir=run_dir)
 
     # Load testing data.
     df_test = pd.read_csv(os.path.join(run_dir, 'log_test.csv'))
 
     # Plot testing data.
-    plot_testing(df=df_test, exp_dir=run_dir)
+    test_rewards, test_actions = plot_testing(df=df_test, exp_dir=run_dir)
 
     # Read the info file.
     with open(os.path.join(run_dir, 'info.txt'), 'r') as f:
@@ -175,9 +193,32 @@ def main(run_dir):
     train_time = float(m.group(1))
     print(f'Training took {train_time}')
 
-    # Count actions taken per episode in testing.
-    test_episode_actions = \
-        df_test[['episode', 'reward']].groupby('episode').count()
+    # Get array of NaNs in the "reward" column. This will notate
+    # episode start.
+    ep_start = df_test['reward'].isna().to_numpy()
+
+    # Roll the array backwards so we get an index into the end of
+    # the episode.
+    ep_end = np.roll(ep_start, -1)
+
+    # Extract voltage columns.
+    v_col = df_test.columns[df_test.columns.str.startswith('bus_')]
+
+    # Extract voltage data for the end of each episode. Hard code the
+    # rounding we did in reward evaluation.
+    v_test_end = df_test.loc[ep_end, v_col].round(6)
+
+    # Check to see if all voltages are in bounds. This indicates
+    # success.
+    low = v_test_end < 0.95
+    high = v_test_end > 1.05
+
+    # noinspection PyUnresolvedReferences
+    pct_success = (~low & ~high).all(axis=1).sum() / v_test_end.shape[0]
+
+    # # Count actions taken per episode in testing.
+    # test_episode_actions = \
+    #     df_test[['episode', 'reward']].groupby('episode').count()
 
     # Get the unique actions taken in testing.
     test_actions = df_test['action_taken'].unique()
@@ -195,7 +236,7 @@ def main(run_dir):
         ep_start.loc[:,
         ep_start.columns[ep_start.columns.str.startswith('bus_')]].round(6)
 
-    assert test_v.shape == (2000, 14)
+    assert test_v.shape == (5000, 14)
 
     under_voltage = (test_v < 0.95).sum(axis=1)
     over_voltage = (test_v > 1.05).sum(axis=1)
@@ -205,11 +246,32 @@ def main(run_dir):
     print('Description of over voltages in testing set:')
     print(over_voltage.describe())
 
+    # Return percent success, mean reward, and num unique testing
+    # actions. Subtract one since we have np.nan in there for actions.
+    return pct_success, test_rewards.mean()[0], test_actions.shape[0] - 1
+
 
 if __name__ == '__main__':
-    for d in ['gm_contingency_512_512', 'gm_contingency_128_256',
-              'gm_contingency_64_128_512', 'gm_contingency_64_128',
-              'gm_contingency_32_64_long', 'gm_contingency_32_32',
-              'gm_contingency_64_64_long', 'gm_contingency_128_128',
-              'gm_contingency_128_128_super_long']:
-        loop(d)
+    # Directories to loop over.
+    dir_list = ['gm_con_512_1024', 'gm_con_512_512', 'gm_con_256_512',
+                'gm_con_256_256', 'gm_con_128_256', 'gm_con_128_128',
+                'gm_con_64_128', 'gm_con_64_64', 'gm_con_32_64',
+                'gm_con_32_32', 'gm_64_64',
+                'gm_contingency_128_128_super_long']
+
+    # Initialize DataFrame to hold summary stats for each run.
+    df_ = pd.DataFrame(np.zeros((len(dir_list), 4)),
+                       columns=['run', 'pct_success', 'mean_reward',
+                                'mean_num_actions'])
+
+    df_['run'] = ''
+
+    for i_, d_ in enumerate(dir_list):
+        s_, r_, a_ = loop(d_)
+        df_.loc[i_, 'run'] = d_
+        df_.loc[i_, 'pct_success'] = s_
+        df_.loc[i_, 'mean_reward'] = r_
+        df_.loc[i_, 'mean_num_actions'] = a_
+
+    df_.to_csv('summary_stats.csv')
+

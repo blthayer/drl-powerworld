@@ -190,7 +190,7 @@ def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
     # Start by resetting the log (which will also flush the log).
     env.reset_log(new_file=test_logfile)
 
-    for _ in range(2000):
+    for _ in range(5000):
         obs = env.reset()
         done = False
 
@@ -260,7 +260,7 @@ if __name__ == '__main__':
     parser.add_argument(
         'case', help='Case to use.', type=str, choices=['14', '14_condensers'])
     parser.add_argument('--num_runs', help='Number of times to train.',
-                        type=int, default=3)
+                        type=int, default=5)
     # https://stackoverflow.com/a/24866869/11052174
     parser.add_argument('--hidden_list',
                         type=lambda s: [int(item) for item in s.split(',')],
