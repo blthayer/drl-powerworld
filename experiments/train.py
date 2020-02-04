@@ -20,11 +20,6 @@ from constants import THIS_DIR, IEEE_14_PWB, IEEE_14_PWB_CONDENSERS, \
 
 # Dictionary of GridMind environment inputs.
 GRIDMIND_DICT = dict(
-    # GridMind team did loading from 80% to 120%
-    max_load_factor=1.2, min_load_factor=0.8,
-    # All loads were always on, and no power factors were
-    # changed.
-    lead_pf_probability=None, load_on_probability=None,
     # Five voltage bins: [0.95, 0.975, 1.0, 1.025, 1.05]
     num_gen_voltage_bins=5,
     gen_voltage_range=(0.95, 1.05),
@@ -47,6 +42,10 @@ GRIDMIND_DICT = dict(
     # pwb_path=IEEE_14_PWB_CONDENSERS,
     # seed=seed,
     # num_scenarios=num_scenarios
+    # max_load_factor=1.2
+    # min_load_factor=0.8
+    # lead_pf_probability=None
+    # load_on_probability=None
     # image_dir=image_dir,
     # csv_logfile=train_logfile,
 )
@@ -118,7 +117,9 @@ def callback_factory(average_reward, max_episodes):
 
 
 def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
-                   callback, policy, case):
+                   callback, policy, case, max_load_factor,
+                   min_load_factor, lead_pf_probability,
+                   load_on_probability):
     """Use this function to take a shot at replicating the GridMind
     paper: https://arxiv.org/abs/1904.10597
 
@@ -143,6 +144,10 @@ def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
     env_dict['image_dir'] = image_dir
     env_dict['csv_logfile'] = train_logfile
     env_dict['num_scenarios'] = num_scenarios
+    env_dict['max_load_factor'] = max_load_factor
+    env_dict['min_load_factor'] = min_load_factor
+    env_dict['lead_pf_probability'] = lead_pf_probability
+    env_dict['load_on_probability'] = load_on_probability
 
     # Initialize the environment.
     env = gym.make(env_name, **env_dict)
@@ -207,7 +212,8 @@ def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
 
 
 def loop(out_dir, env_name, runs, hidden_list, num_scenarios,
-         avg_reward, num_time_steps, case):
+         avg_reward, num_time_steps, case, min_load_factor,
+         max_load_factor, lead_pf_probability, load_on_probability):
     """Run the gridmind_reproduce function in a loop."""
     base_dir = os.path.join(THIS_DIR, out_dir)
 
@@ -246,7 +252,12 @@ def loop(out_dir, env_name, runs, hidden_list, num_scenarios,
         learn_and_test(
             out_dir=tmp_dir, seed=i, env_name=env_name,
             num_scenarios=num_scenarios, num_time_steps=num_time_steps,
-            callback=callback, policy=CustomPolicy, case=case)
+            callback=callback, policy=CustomPolicy, case=case,
+            min_load_factor=min_load_factor,
+            lead_pf_probability=lead_pf_probability,
+            load_on_probability=load_on_probability,
+            max_load_factor=max_load_factor
+        )
 
 
 if __name__ == '__main__':
@@ -256,7 +267,8 @@ if __name__ == '__main__':
     parser.add_argument(
         'env', help='Gym PowerWorld environment to use.', type=str,
         choices=['powerworld-gridmind-env-v0',
-                 'powerworld-gridmind-contingencies-env-v0'])
+                 'powerworld-gridmind-contingencies-env-v0',
+                 'powerworld-gridmind-hard-env-v0'])
     parser.add_argument(
         'case', help='Case to use.', type=str, choices=['14', '14_condensers'])
     parser.add_argument('--num_runs', help='Number of times to train.',
@@ -280,6 +292,11 @@ if __name__ == '__main__':
               'by achieving avg_reward). Note that the exploration rate is '
               'currently set to decay linearly from start to num_time_steps.'))
 
+    parser.add_argument('--min_load_factor', type=float, default=0.8)
+    parser.add_argument('--max_load_factor', type=float, default=1.2)
+    parser.add_argument('--load_on_probability', type=float, default=1.0)
+    parser.add_argument('--lead_pf_probability', type=float, default=0.0)
+
     # Parse the arguments.
     args_in = parser.parse_args()
 
@@ -294,4 +311,7 @@ if __name__ == '__main__':
     loop(out_dir=args_in.out_dir, env_name=args_in.env, runs=args_in.num_runs,
          hidden_list=args_in.hidden_list, num_scenarios=args_in.num_scenarios,
          avg_reward=args_in.avg_reward, num_time_steps=args_in.num_time_steps,
-         case=case_)
+         case=case_, min_load_factor=args_in.min_load_factor,
+         max_load_factor=args_in.max_load_factor,
+         load_on_probability=args_in.load_on_probability,
+         lead_pf_probability=args_in.lead_pf_probability)
