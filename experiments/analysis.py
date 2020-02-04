@@ -3,8 +3,19 @@ from constants import THIS_DIR
 import pandas as pd
 import os
 import numpy as np
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import re
+
+# Set up some default plotting.
+# 3" x 3" should work well for creating 2 x 2 sub plots.
+# mpl.rcParams['figure.figsize'] = [3, 3]
+# Use 300 DPI
+mpl.rcParams['savefig.dpi'] = 300
+# Use tight bbox for saving.
+# mpl.rcParams['savefig.bbox'] = 'tight'
+# No padding.
+# mpl.rcParams['savefig.pad_inches'] = 0.0
 
 
 def loop(in_dir):
@@ -54,6 +65,7 @@ def _plot_helper_train(s_in, save_dir, term, window=True):
     ax1.set_xlabel('Episode Number')
     ax1.set_ylabel(f'Total Episode {term}s')
     ax1.grid(True, 'both')
+    ax1.set_axisbelow(True)
     plt.tight_layout()
 
     fig1.savefig(os.path.join(save_dir, f'episode_{l_term}.png'), format='png')
@@ -72,6 +84,7 @@ def _plot_helper_train(s_in, save_dir, term, window=True):
         ax2.set_ylabel(f'Average Total Episode {term}s')
         ax2.set_title(f'100 Episode Average Episode {term}s (Sliding Window)')
         ax2.grid(True, 'both')
+        ax2.set_axisbelow(True)
         plt.tight_layout()
 
         fig2.savefig(
@@ -102,6 +115,8 @@ def _plot_helper_test(s_in, save_dir, term):
     # Create bar chart.
     fig = plt.figure()
     ax = v_counts.plot(kind='bar')
+    # Ensure the ylim is 0 to 100.
+    ax.set_ybound(0.0, 100.0)
     # ax.bar(v_counts.index, v_counts.to_numpy(), align='center')
     ax.set_xlabel(f'{term}s')
     ax.set_ylabel(f'Percentage of Episodes with Given {term}')
@@ -110,7 +125,7 @@ def _plot_helper_test(s_in, save_dir, term):
     # Use nifty stack overflow answer to add labels.
     add_value_labels(ax)
     ax.set_axisbelow(True)
-    # plt.tight_layout()
+    plt.tight_layout()
     # Save.
     # fig = plt.gcf()
     fig.savefig(os.path.join(save_dir, f'test_{l_term}.png'), format='png')
@@ -236,7 +251,7 @@ def main(run_dir):
         ep_start.loc[:,
         ep_start.columns[ep_start.columns.str.startswith('bus_')]].round(6)
 
-    assert test_v.shape == (5000, 14)
+    # assert test_v.shape == (5000, 14)
 
     under_voltage = (test_v < 0.95).sum(axis=1)
     over_voltage = (test_v > 1.05).sum(axis=1)
