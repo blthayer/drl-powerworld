@@ -25,7 +25,7 @@ ENV_DICT = dict(
     gen_voltage_range=(0.95, 1.05),
     log_level=logging.INFO,
     # Use the same reward values.
-    rewards=dict(normal=100, violation=-50, diverged=-100),
+    # rewards=dict(normal=100, violation=-50, diverged=-100),
     # Use Numpy float32.
     dtype=np.float32,
     # 0.95-1.05 is the "good" voltage range.
