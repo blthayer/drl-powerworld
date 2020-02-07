@@ -19,7 +19,7 @@ from constants import THIS_DIR, IEEE_14_PWB, IEEE_14_PWB_CONDENSERS, \
     IEEE_14_ONELINE_AXD, IEEE_14_CONTOUR_AXD
 
 # Dictionary of GridMind environment inputs.
-GRIDMIND_DICT = dict(
+ENV_DICT = dict(
     # Five voltage bins: [0.95, 0.975, 1.0, 1.025, 1.05]
     num_gen_voltage_bins=5,
     gen_voltage_range=(0.95, 1.05),
@@ -136,7 +136,7 @@ def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
     info_file = os.path.join(out_dir, 'info.txt')
 
     # Get a copy of the default inputs.
-    env_dict = deepcopy(GRIDMIND_DICT)
+    env_dict = deepcopy(ENV_DICT)
 
     # overwrite the seed, image_dir, and csv_logfile.
     env_dict['pwb_path'] = case
@@ -268,7 +268,9 @@ if __name__ == '__main__':
         'env', help='Gym PowerWorld environment to use.', type=str,
         choices=['powerworld-gridmind-env-v0',
                  'powerworld-gridmind-contingencies-env-v0',
-                 'powerworld-gridmind-hard-env-v0'])
+                 'powerworld-gridmind-hard-env-v0',
+                 'powerworld-discrete-env-simple-14-bus-v0'
+                 ])
     parser.add_argument(
         'case', help='Case to use.', type=str, choices=['14', '14_condensers'])
     parser.add_argument('--num_runs', help='Number of times to train.',
