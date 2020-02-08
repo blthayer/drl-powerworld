@@ -1,5 +1,22 @@
-"""Subclass DQN from stable-baselines and overwrite the "learn" method
-such that each action can only be taken once per episode.
+"""This module contains some modified versions of DQN classes, methods,
+etc. from stable_baselines. The point of the modifications is to ensure
+that both during training and testing, each unique action is allowed to
+be taken at most once per episode.
+
+This is not the best way of doing things, as upstream changes will be
+missed. The alternative would be to fork, refactor, modify, subclass,
+etc. For the amount of time I have remaining, that's simply too
+involved.
+
+Modified areas will be tagged with:
+##################
+# MODIFICATION:
+<modified code>
+##################
+
+The original code will be like so:
+# ORIGINAL:
+# <original code>
 """
 import tensorflow as tf
 import numpy as np
@@ -11,11 +28,12 @@ from stable_baselines.common.vec_env import VecEnv
 from stable_baselines.common.schedules import LinearSchedule
 from stable_baselines.deepq.replay_buffer import ReplayBuffer, PrioritizedReplayBuffer
 from stable_baselines.a2c.utils import total_episode_reward_logger
+from stable_baselines.deepq.policies import FeedForwardPolicy
 
 
 class DQNUniqueActions(DQN):
-    """Subclass which allows each action to be taken at most once per
-    episode.
+    """Subclass with a modified "learn" method which only allows actions
+    to be taken once per episode.
     """
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="DQN",
               reset_num_timesteps=True, replay_wrapper=None):
@@ -54,6 +72,13 @@ class DQNUniqueActions(DQN):
             obs = self.env.reset()
             reset = True
 
+            ############################################################
+            # MODIFICATION:
+            # Track list of actions taken each episode. This is
+            # intentionally not a set so that we can use np.isin.
+            action_list = list()
+            ############################################################
+
             for _ in range(total_timesteps):
                 if callback is not None:
                     # Only stop training if return value is False, not when it is None. This is for backwards
@@ -78,7 +103,27 @@ class DQNUniqueActions(DQN):
                     kwargs['update_param_noise_threshold'] = update_param_noise_threshold
                     kwargs['update_param_noise_scale'] = True
                 with self.sess.as_default():
-                    action = self.act(np.array(obs)[None], update_eps=update_eps, **kwargs)[0]
+                    ####################################################
+                    # MODIFICATION:
+                    # Rename variable from original, since it's now
+                    # going to come back as an array due to the
+                    # modified build_act function being used to
+                    # construct everything.
+                    action_arr = self.act(np.array(obs)[None], update_eps=update_eps, **kwargs)[0]
+                    ####################################################
+                    # ORIGINAL:
+                    # action = self.act(np.array(obs)[None], update_eps=update_eps, **kwargs)[0]
+
+                ########################################################
+                # MODIFICATION:
+                # Get the best action that has not yet been taken this
+                # episode.
+                action = \
+                    action_arr[np.argmin(np.isin(action_arr, action_list))]
+                # Add this action to the list.
+                action_list.append(action)
+                ########################################################
+
                 env_action = action
                 reset = False
                 new_obs, rew, done, info = self.env.step(env_action)
@@ -94,6 +139,11 @@ class DQNUniqueActions(DQN):
 
                 episode_rewards[-1] += rew
                 if done:
+                    ####################################################
+                    # MODIFICATION:
+                    # Clear the list.
+                    action_list.clear()
+                    ####################################################
                     maybe_is_success = info.get('is_success')
                     if maybe_is_success is not None:
                         episode_successes.append(float(maybe_is_success))
@@ -169,8 +219,12 @@ class DQNUniqueActions(DQN):
         return self
 
 
-def build_act(q_func, ob_space, ac_space, stochastic_ph, update_eps_ph, sess):
+def build_act_mod(q_func, ob_space, ac_space, stochastic_ph, update_eps_ph, sess):
     """
+    Original from build_graph.py from stable_baselines.deepq. This
+    modified version returns the full sorted action array instead of
+    the single best action.
+
     Creates the act function:
 
     :param q_func: (DQNPolicy) the policy
@@ -187,11 +241,29 @@ def build_act(q_func, ob_space, ac_space, stochastic_ph, update_eps_ph, sess):
 
     policy = q_func(sess, ob_space, ac_space, 1, 1, None)
     obs_phs = (policy.obs_ph, policy.processed_obs)
-    deterministic_actions = tf.argmax(policy.q_values, axis=1)
+    ####################################################################
+    # MODIFICATION:
+    # Get all sorted q_values instead of just the best one. Have to
+    # cast to int64, since it comes back as int32 which is incompatible
+    # with the random_actions, which is int64.
+    deterministic_actions = tf.cast(
+        tf.argsort(policy.q_values, axis=1, direction='DESCENDING'), tf.int64)
+    ####################################################################
+    # ORIGINAL:
+    # Note that the original comes out as int64 since that's the default
+    # from argmax.
+    # deterministic_actions = tf.argmax(policy.q_values, axis=1)
 
     batch_size = tf.shape(policy.obs_ph)[0]
     n_actions = ac_space.nvec if isinstance(ac_space, MultiDiscrete) else ac_space.n
-    random_actions = tf.random_uniform(tf.stack([batch_size]), minval=0, maxval=n_actions, dtype=tf.int64)
+    ####################################################################
+    # MODIFICATION:
+    # TODO: It feels wrong not to use "batch_size" like was done in the
+    #   original, but this seems to be working.
+    random_actions = tf.random_uniform((1, n_actions), minval=0, maxval=n_actions, dtype=tf.int64)
+    ####################################################################
+    # ORIGINAL:
+    # random_actions = tf.random_uniform(tf.stack([batch_size]), minval=0, maxval=n_actions, dtype=tf.int64)
     chose_random = tf.random_uniform(tf.stack([batch_size]), minval=0, maxval=1, dtype=tf.float32) < eps
     stochastic_actions = tf.where(chose_random, random_actions, deterministic_actions)
 
@@ -208,11 +280,19 @@ def build_act(q_func, ob_space, ac_space, stochastic_ph, update_eps_ph, sess):
     return act, obs_phs
 
 
-def step_mod(self, obs, state=None, mask=None, deterministic=True):
-    """Originally from dqn.FeedForwardPolicy"""
+def step_mod(self: FeedForwardPolicy, obs, state=None, mask=None,
+             deterministic=True):
+    """Originally from dqn.FeedForwardPolicy.step. This modified method
+    will return the full sorted action array instead of the single best.
+    """
     q_values, actions_proba = self.sess.run([self.q_values, self.policy_proba], {self.obs_ph: obs})
     if deterministic:
-        actions = np.argmax(q_values, axis=1)
+        ################################################################
+        # MODIFIED:
+        actions = np.flip(np.argsort(q_values))
+        ################################################################
+        # ORIGINAL:
+        # actions = np.argmax(q_values, axis=1)
     else:
         # Unefficient sampling
         # TODO: replace the loop

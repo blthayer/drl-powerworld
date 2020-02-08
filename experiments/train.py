@@ -13,6 +13,9 @@ import json
 from stable_baselines.deepq.policies import FeedForwardPolicy
 from stable_baselines import DQN
 import argparse
+# noinspection PyUnresolvedReferences
+from dqn_subclass import DQNUniqueActions, build_act_mod, step_mod
+from unittest.mock import patch
 
 # noinspection PyUnresolvedReferences,PyPackageRequirements
 from constants import THIS_DIR, IEEE_14_PWB, IEEE_14_PWB_CONDENSERS, \
@@ -119,7 +122,7 @@ def callback_factory(average_reward, max_episodes):
 def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
                    callback, policy, case, max_load_factor,
                    min_load_factor, lead_pf_probability,
-                   load_on_probability):
+                   load_on_probability, mod_learn):
     """Use this function to take a shot at replicating the GridMind
     paper: https://arxiv.org/abs/1904.10597
 
@@ -166,7 +169,12 @@ def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
     init_dict['policy'] = policy
 
     # Initialize.
-    model = DQN(**init_dict)
+    if mod_learn:
+        with patch('stable_baselines.deepq.build_graph.build_act',
+                   new=build_act_mod):
+            model = DQNUniqueActions(**init_dict)
+    else:
+        model = DQN(**init_dict)
 
     # Log inputs.
     init_dict.pop('policy')
@@ -195,6 +203,16 @@ def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
     # Start by resetting the log (which will also flush the log).
     env.reset_log(new_file=test_logfile)
 
+    if mod_learn:
+        test_loop_mod(env, model)
+    else:
+        test_loop(env, model)
+
+    # Close the environment (which will flush the log).
+    env.close()
+
+
+def test_loop(env, model):
     for _ in range(5000):
         obs = env.reset()
         done = False
@@ -204,16 +222,35 @@ def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
             obs, rew, done, _ = \
                 env.step(model.predict(obs, deterministic=True)[0])
 
-        # Render again at the end.
-        # env.render()
 
-    # Close the environment (which will flush the log).
-    env.close()
+def test_loop_mod(env, model):
+    action_list = list()
+    for _ in range(5000):
+        # Get the environment ready.
+        obs = env.reset()
+        done = False
+
+        # Clear the action list.
+        action_list.clear()
+
+        while not done:
+            # env.render()
+            # Get the ranked actions.
+            action_arr = model.predict(obs, deterministic=True)[0]
+
+            # Get the best action that has not yet been used this
+            # episode, add it to the list.
+            action = action_arr[np.argmin(np.isin(action_arr, action_list))]
+            action_list.append(action)
+
+            # Take the step.
+            obs, rew, done, _ = env.step(action)
 
 
 def loop(out_dir, env_name, runs, hidden_list, num_scenarios,
          avg_reward, num_time_steps, case, min_load_factor,
-         max_load_factor, lead_pf_probability, load_on_probability):
+         max_load_factor, lead_pf_probability, load_on_probability,
+         mod_learn):
     """Run the gridmind_reproduce function in a loop."""
     base_dir = os.path.join(THIS_DIR, out_dir)
 
@@ -234,6 +271,12 @@ def loop(out_dir, env_name, runs, hidden_list, num_scenarios,
             super(CustomPolicy, self).__init__(
                 *args, **kwargs, layers=hidden_list, layer_norm=False,
                 feature_extraction='mlp', act_fun=tf.nn.relu)
+
+    # If we're using the modified learning where each episode is only
+    # allowed to take each action at most once, override the step
+    # method.
+    if mod_learn:
+        CustomPolicy.step = step_mod
 
     # Loop over the runs.
     for i in range(runs):
@@ -256,7 +299,7 @@ def loop(out_dir, env_name, runs, hidden_list, num_scenarios,
             min_load_factor=min_load_factor,
             lead_pf_probability=lead_pf_probability,
             load_on_probability=load_on_probability,
-            max_load_factor=max_load_factor
+            max_load_factor=max_load_factor, mod_learn=mod_learn
         )
 
 
@@ -293,6 +336,9 @@ if __name__ == '__main__':
         help=('Number of time steps to run training (unless terminated early '
               'by achieving avg_reward). Note that the exploration rate is '
               'currently set to decay linearly from start to num_time_steps.'))
+    parser.add_argument(
+        '--mod_learn', action='store_true'
+    )
 
     parser.add_argument('--min_load_factor', type=float, default=0.8)
     parser.add_argument('--max_load_factor', type=float, default=1.2)
@@ -316,4 +362,5 @@ if __name__ == '__main__':
          case=case_, min_load_factor=args_in.min_load_factor,
          max_load_factor=args_in.max_load_factor,
          load_on_probability=args_in.load_on_probability,
-         lead_pf_probability=args_in.lead_pf_probability)
+         lead_pf_probability=args_in.lead_pf_probability,
+         mod_learn=args_in.mod_learn)
