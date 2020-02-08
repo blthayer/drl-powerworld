@@ -3,10 +3,10 @@ such that each action can only be taken once per episode.
 """
 import tensorflow as tf
 import numpy as np
-
+from gym.spaces import MultiDiscrete
 from stable_baselines import DQN
 from stable_baselines import logger
-from stable_baselines.common import SetVerbosity, TensorboardWriter
+from stable_baselines.common import SetVerbosity, TensorboardWriter, tf_util
 from stable_baselines.common.vec_env import VecEnv
 from stable_baselines.common.schedules import LinearSchedule
 from stable_baselines.deepq.replay_buffer import ReplayBuffer, PrioritizedReplayBuffer
@@ -167,3 +167,42 @@ class DQNUniqueActions(DQN):
                 self.num_timesteps += 1
 
         return self
+
+
+def build_act(q_func, ob_space, ac_space, stochastic_ph, update_eps_ph, sess):
+    """
+    Creates the act function:
+
+    :param q_func: (DQNPolicy) the policy
+    :param ob_space: (Gym Space) The observation space of the environment
+    :param ac_space: (Gym Space) The action space of the environment
+    :param stochastic_ph: (TensorFlow Tensor) the stochastic placeholder
+    :param update_eps_ph: (TensorFlow Tensor) the update_eps placeholder
+    :param sess: (TensorFlow session) The current TensorFlow session
+    :return: (function (TensorFlow Tensor, bool, float): TensorFlow Tensor, (TensorFlow Tensor, TensorFlow Tensor)
+        act function to select and action given observation (See the top of the file for details),
+        A tuple containing the observation placeholder and the processed observation placeholder respectively.
+    """
+    eps = tf.get_variable("eps", (), initializer=tf.constant_initializer(0))
+
+    policy = q_func(sess, ob_space, ac_space, 1, 1, None)
+    obs_phs = (policy.obs_ph, policy.processed_obs)
+    deterministic_actions = tf.argmax(policy.q_values, axis=1)
+
+    batch_size = tf.shape(policy.obs_ph)[0]
+    n_actions = ac_space.nvec if isinstance(ac_space, MultiDiscrete) else ac_space.n
+    random_actions = tf.random_uniform(tf.stack([batch_size]), minval=0, maxval=n_actions, dtype=tf.int64)
+    chose_random = tf.random_uniform(tf.stack([batch_size]), minval=0, maxval=1, dtype=tf.float32) < eps
+    stochastic_actions = tf.where(chose_random, random_actions, deterministic_actions)
+
+    output_actions = tf.cond(stochastic_ph, lambda: stochastic_actions, lambda: deterministic_actions)
+    update_eps_expr = eps.assign(tf.cond(update_eps_ph >= 0, lambda: update_eps_ph, lambda: eps))
+    _act = tf_util.function(inputs=[policy.obs_ph, stochastic_ph, update_eps_ph],
+                            outputs=output_actions,
+                            givens={update_eps_ph: -1.0, stochastic_ph: True},
+                            updates=[update_eps_expr])
+
+    def act(obs, stochastic=True, update_eps=-1):
+        return _act(obs, stochastic, update_eps)
+
+    return act, obs_phs
