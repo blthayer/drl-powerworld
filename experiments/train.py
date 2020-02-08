@@ -14,7 +14,7 @@ from stable_baselines.deepq.policies import FeedForwardPolicy
 from stable_baselines import DQN
 import argparse
 # noinspection PyUnresolvedReferences
-from dqn_subclass import DQNUniqueActions, build_act_mod, step_mod
+from dqn_mod import DQNUniqueActions, build_act_mod, step_mod
 from unittest.mock import patch
 
 # noinspection PyUnresolvedReferences,PyPackageRequirements
