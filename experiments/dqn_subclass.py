@@ -206,3 +206,19 @@ def build_act(q_func, ob_space, ac_space, stochastic_ph, update_eps_ph, sess):
         return _act(obs, stochastic, update_eps)
 
     return act, obs_phs
+
+
+def step_mod(self, obs, state=None, mask=None, deterministic=True):
+    """Originally from dqn.FeedForwardPolicy"""
+    q_values, actions_proba = self.sess.run([self.q_values, self.policy_proba], {self.obs_ph: obs})
+    if deterministic:
+        actions = np.argmax(q_values, axis=1)
+    else:
+        # Unefficient sampling
+        # TODO: replace the loop
+        # maybe with Gumbel-max trick ? (http://amid.fish/humble-gumbel)
+        actions = np.zeros((len(obs),), dtype=np.int64)
+        for action_idx in range(len(obs)):
+            actions[action_idx] = np.random.choice(self.n_actions, p=actions_proba[action_idx])
+
+    return actions, q_values, None
