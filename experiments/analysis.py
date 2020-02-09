@@ -25,19 +25,27 @@ def loop(in_dir):
     pct_success_arr = np.zeros(len(sub_dirs))
     mean_reward_arr = np.zeros_like(pct_success_arr)
     num_test_actions_arr = np.zeros_like(pct_success_arr)
+    time_arr = np.zeros_like(pct_success_arr)
 
     for i, this_d in enumerate(sub_dirs):
-        pct_success, mean_reward, num_test_actions = main(
+        pct_success, mean_reward, num_test_actions, train_time = main(
             os.path.join(THIS_DIR, in_dir, this_d))
 
         pct_success_arr[i] = pct_success
         mean_reward_arr[i] = mean_reward
         num_test_actions_arr[i] = num_test_actions
+        time_arr[i] = train_time
+
+    df = pd.DataFrame({'Success Percentage': pct_success_arr,
+                       'Mean Reward': mean_reward_arr,
+                       'Num Test Actions': num_test_actions_arr,
+                       'Training time': time_arr})
+    df.to_csv(os.path.join(in_dir, 'summary.csv'))
 
     # It's okay to take means of means since all our tests have the
     # same number of samples.
     return pct_success_arr.mean(), mean_reward_arr.mean(), \
-        num_test_actions_arr.mean()
+        num_test_actions_arr.mean(), time_arr.mean()
 
 
 def _get_rewards_actions(df):
@@ -263,16 +271,19 @@ def main(run_dir):
 
     # Return percent success, mean reward, and num unique testing
     # actions. Subtract one since we have np.nan in there for actions.
-    return pct_success, test_rewards.mean()[0], test_actions.shape[0] - 1
+    return pct_success, test_rewards.mean()[0], test_actions.shape[0] - 1, \
+        train_time
 
 
 if __name__ == '__main__':
     # Directories to loop over.
-    dir_list = ['gm_con_512_1024', 'gm_con_512_512', 'gm_con_256_512',
-                'gm_con_256_256', 'gm_con_128_256', 'gm_con_128_128',
-                'gm_con_64_128', 'gm_con_64_64', 'gm_con_32_64',
-                'gm_con_32_32', 'gm_64_64',
-                'gm_contingency_128_128_super_long']
+    dir_list = \
+        [os.path.basename(f.path) for f in os.scandir(THIS_DIR) if (f.is_dir())]  # and f.name.startswith('de'))]
+    # dir_list = ['gm_con_512_1024', 'gm_con_512_512', 'gm_con_256_512',
+    #             'gm_con_256_256', 'gm_con_128_256', 'gm_con_128_128',
+    #             'gm_con_64_128', 'gm_con_64_64', 'gm_con_32_64',
+    #             'gm_con_32_32', 'gm_64_64']
+    #             # 'gm_contingency_128_128_super_long']
 
     # Initialize DataFrame to hold summary stats for each run.
     df_ = pd.DataFrame(np.zeros((len(dir_list), 4)),
@@ -282,11 +293,14 @@ if __name__ == '__main__':
     df_['run'] = ''
 
     for i_, d_ in enumerate(dir_list):
-        s_, r_, a_ = loop(d_)
+        if d_.startswith('_'):
+            continue
+        s_, r_, a_, t_ = loop(d_)
         df_.loc[i_, 'run'] = d_
         df_.loc[i_, 'pct_success'] = s_
         df_.loc[i_, 'mean_reward'] = r_
         df_.loc[i_, 'mean_num_actions'] = a_
+        df_.loc[i_, 'mean_train_time'] = t_
 
     df_.to_csv('summary_stats.csv')
 
