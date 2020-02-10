@@ -313,7 +313,9 @@ if __name__ == '__main__':
                  'powerworld-gridmind-contingencies-env-v0',
                  'powerworld-gridmind-hard-env-v0',
                  'powerworld-discrete-env-simple-14-bus-v0',
-                 'powerworld-discrete-env-gen-state-14-bus-v0'
+                 'powerworld-discrete-env-gen-state-14-bus-v0',
+                 'powerworld-discrete-env-branch-state-14-bus-v0',
+                 'powerworld-discrete-env-branch-and-gen-state-14-bus-v0'
                  ])
     parser.add_argument(
         'case', help='Case to use.', type=str, choices=['14', '14_condensers'])
