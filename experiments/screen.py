@@ -26,9 +26,7 @@ LOG = logging.getLogger(__name__)
 
 # Fill in the ENV_DICT with defaults.
 ENV_DICT_FILLED = deepcopy(ENV_DICT)
-# TODO: Update this after testing.
-ENV_DICT_FILLED['num_scenarios'] = 1000
-# ENV_DICT_FILLED['num_scenarios'] = NUM_SCENARIOS_DEFAULT
+ENV_DICT_FILLED['num_scenarios'] = NUM_SCENARIOS_DEFAULT
 ENV_DICT_FILLED['max_load_factor'] = MAX_LOAD_FACTOR_DEFAULT
 ENV_DICT_FILLED['min_load_factor'] = MIN_LOAD_FACTOR_DEFAULT
 ENV_DICT_FILLED['min_load_pf'] = MIN_LOAD_PF_DEFAULT
