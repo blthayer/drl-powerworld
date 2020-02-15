@@ -4,7 +4,6 @@ import gym
 # Must import gym_powerworld for the environments to get registered.
 # noinspection PyUnresolvedReferences
 import gym_powerworld
-import logging
 import numpy as np
 import time
 import shutil
@@ -16,77 +15,15 @@ import argparse
 # noinspection PyUnresolvedReferences
 from dqn_mod import DQNUniqueActions, build_act_mod, step_mod
 from unittest.mock import patch
+import pickle
 
 # noinspection PyUnresolvedReferences,PyPackageRequirements
 from constants import THIS_DIR, IEEE_14_PWB, IEEE_14_PWB_CONDENSERS, \
-    IEEE_14_ONELINE_AXD, IEEE_14_CONTOUR_AXD
-
-# Dictionary of GridMind environment inputs.
-ENV_DICT = dict(
-    # Five voltage bins: [0.95, 0.975, 1.0, 1.025, 1.05]
-    num_gen_voltage_bins=5,
-    gen_voltage_range=(0.95, 1.05),
-    log_level=logging.INFO,
-    # Use the same reward values.
-    # rewards=dict(normal=100, violation=-50, diverged=-100),
-    # Use Numpy float32.
-    dtype=np.float32,
-    # 0.95-1.05 is the "good" voltage range.
-    low_v=0.95, high_v=1.05,
-    # For later visualization:
-    oneline_axd=IEEE_14_ONELINE_AXD,
-    contour_axd=IEEE_14_CONTOUR_AXD,
-    # Use a really small render interval so the "testing"
-    # scenarios will go by quickly.
-    render_interval=1e-9,
-    # .csv logging:
-    log_buffer=10000,
-    # The following fields should be added in the function:
-    # pwb_path=IEEE_14_PWB_CONDENSERS,
-    # seed=seed,
-    # num_scenarios=num_scenarios
-    # max_load_factor=1.2
-    # min_load_factor=0.8
-    # lead_pf_probability=None
-    # load_on_probability=None
-    # image_dir=image_dir,
-    # csv_logfile=train_logfile,
-)
-
-BASELINES_DICT = dict(
-    # The following are all defaults:
-    learning_rate=5e-4,
-    buffer_size=50000,
-    exploration_initial_eps=1.0,
-    train_freq=1,
-    batch_size=32,
-    double_q=True,
-    learning_starts=1000,
-    target_network_update_freq=500,
-    prioritized_replay_alpha=0.6,
-    prioritized_replay_beta0=0.4,
-    prioritized_replay_beta_iters=None,
-    prioritized_replay_eps=1e-6,
-    param_noise=False,
-    tensorboard_log=None,
-    _init_setup_model=True,
-    full_tensorboard_log=False,
-    n_cpu_tf_sess=None,
-    # Not default:
-    verbose=1,
-    prioritized_replay=True,
-    # Go all the way down to 1%.
-    exploration_final_eps=0.01,
-    # Set gamma to 1.0, since there are already incentives built-in for
-    # minimizing the number of actions.
-    gamma=1.0,
-    # Have exploration linearly decay based on total_timesteps.
-    exploration_fraction=1.0,
-    # Update the following:
-    # policy=policy
-    # seed=seed
-    # env=env
-)
+    IEEE_14_ONELINE_AXD, IEEE_14_CONTOUR_AXD, ENV_DICT, BASELINES_DICT, \
+    MIN_LOAD_FACTOR_DEFAULT, MAX_LOAD_FACTOR_DEFAULT, \
+    LOAD_ON_PROBABILITY_DEFAULT, LEAD_PF_PROBABILITY_DEFAULT, \
+    NUM_TIME_STEPS_DEFAULT, NUM_SCENARIOS_DEFAULT, NUM_RUNS_DEFAULT, \
+    get_file_str, MIN_LOAD_PF_DEFAULT
 
 
 def callback_factory(average_reward, max_episodes):
@@ -122,7 +59,7 @@ def callback_factory(average_reward, max_episodes):
 def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
                    callback, policy, case, max_load_factor,
                    min_load_factor, lead_pf_probability,
-                   load_on_probability, mod_learn):
+                   load_on_probability, mod_learn, v_truncate, case_str):
     """Use this function to take a shot at replicating the GridMind
     paper: https://arxiv.org/abs/1904.10597
 
@@ -146,14 +83,73 @@ def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
     env_dict['seed'] = seed
     env_dict['image_dir'] = image_dir
     env_dict['csv_logfile'] = train_logfile
+    # Set remaining inputs.
     env_dict['num_scenarios'] = num_scenarios
     env_dict['max_load_factor'] = max_load_factor
     env_dict['min_load_factor'] = min_load_factor
     env_dict['lead_pf_probability'] = lead_pf_probability
     env_dict['load_on_probability'] = load_on_probability
+    env_dict['truncate_voltages'] = v_truncate
 
     # Initialize the environment.
     env = gym.make(env_name, **env_dict)
+
+    # See if we've pre-screened for this input combination.
+    file_str = get_file_str(case_str=case_str, seed=seed,
+                            v_truncate=v_truncate)
+
+    json_file = 'env_input' + file_str + '.json'
+    mask_file = 'mask' + file_str + '.pkl'
+    try:
+        with open(json_file, 'r') as f:
+            env_dict_screen = json.load(f)
+    except FileNotFoundError:
+        env_dict_screen = None
+
+    print('*' * 120)
+    print('*' * 120)
+    all_match = False
+    if env_dict_screen is not None:
+        all_match = True
+        # Compare the important params.
+        for key in ['pwb_path', 'num_scenarios', 'max_load_factor',
+                    'min_load_factor', 'min_load_pf', 'lead_pf_probability',
+                    'load_on_probability', 'shunt_closed_probability',
+                    'num_gen_voltage_bins', 'gen_voltage_range', 'seed',
+                    'low_v', 'high_v', 'truncate_voltages']:
+            # Extract params.
+            p1 = env_dict_screen[key]
+            p2 = env_dict[key]
+
+            # If either p1 or p2 are lists, cast them to tuples.
+            if isinstance(p1, list):
+                p1 = tuple(p1)
+
+            if isinstance(p2, list):
+                p2 = tuple(p2)
+
+            if p1 != p2:
+                print(f'Cannot use screening vector because {key} params do '
+                      f'not match. Screen: {p1}, Train: {p2}')
+                all_match = False
+                break
+
+        if all_match:
+            print('Key parameters matched up, so we can use the screening '
+                  'vector.')
+            with open(mask_file, 'rb') as f:
+                screen_vec = pickle.load(f)
+
+            env.filter_scenarios(screen_vec)
+            k = screen_vec.sum()
+            r = (~screen_vec).sum()
+            print(f'Screening successful. Kept {k} scenarios, removed {r}.')
+    else:
+        print(f'Could not find file {json_file} so we cannot use the '
+              'screening vector.')
+
+    print('*' * 120)
+    print('*' * 120)
 
     # Get a copy of the default inputs for dqn.
     init_dict = deepcopy(BASELINES_DICT)
@@ -203,6 +199,12 @@ def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
     # Start by resetting the log (which will also flush the log).
     env.reset_log(new_file=test_logfile)
 
+    # If we're using pre-screened scenarios, we know that we can count
+    # on all power flows to be successful. So, we can confidently set
+    # the scenario index to 5000 episodes before the end.
+    if all_match:
+        env.scenario_idx = env.num_scenarios - 5000 - 1
+
     if mod_learn:
         test_loop_mod(env, model)
     else:
@@ -250,7 +252,7 @@ def test_loop_mod(env, model):
 def loop(out_dir, env_name, runs, hidden_list, num_scenarios,
          avg_reward, num_time_steps, case, min_load_factor,
          max_load_factor, lead_pf_probability, load_on_probability,
-         mod_learn):
+         mod_learn, v_truncate, case_str):
     """Run the gridmind_reproduce function in a loop."""
     base_dir = os.path.join(THIS_DIR, out_dir)
 
@@ -280,6 +282,7 @@ def loop(out_dir, env_name, runs, hidden_list, num_scenarios,
 
     # Loop over the runs.
     for i in range(runs):
+        seed = i
         # Create name of directory for this run.
         tmp_dir = os.path.join(base_dir, f'run_{i}')
 
@@ -293,13 +296,14 @@ def loop(out_dir, env_name, runs, hidden_list, num_scenarios,
 
         # Do the learning and testing.
         learn_and_test(
-            out_dir=tmp_dir, seed=i, env_name=env_name,
+            out_dir=tmp_dir, seed=seed, env_name=env_name,
             num_scenarios=num_scenarios, num_time_steps=num_time_steps,
             callback=callback, policy=CustomPolicy, case=case,
             min_load_factor=min_load_factor,
             lead_pf_probability=lead_pf_probability,
             load_on_probability=load_on_probability,
-            max_load_factor=max_load_factor, mod_learn=mod_learn
+            max_load_factor=max_load_factor, mod_learn=mod_learn,
+            v_truncate=v_truncate, case_str=case_str
         )
 
 
@@ -320,14 +324,14 @@ if __name__ == '__main__':
     parser.add_argument(
         'case', help='Case to use.', type=str, choices=['14', '14_condensers'])
     parser.add_argument('--num_runs', help='Number of times to train.',
-                        type=int, default=5)
+                        type=int, default=NUM_RUNS_DEFAULT)
     # https://stackoverflow.com/a/24866869/11052174
     parser.add_argument('--hidden_list',
                         type=lambda s: [int(item) for item in s.split(',')],
                         default=[64, 64],
                         help='List of hidden layer sizes, e.g. "64,128"')
     parser.add_argument(
-        '--num_scenarios', type=int, default=int(5e5*3),
+        '--num_scenarios', type=int, default=int(NUM_SCENARIOS_DEFAULT),
         help='Number of scenarios for the environment to create.',
     )
     parser.add_argument(
@@ -335,7 +339,7 @@ if __name__ == '__main__':
         help='Stop training when the 100 episode average has hit this reward.'
     )
     parser.add_argument(
-        '--num_time_steps', type=int, default=int(5e5),
+        '--num_time_steps', type=int, default=int(NUM_TIME_STEPS_DEFAULT),
         help=('Number of time steps to run training (unless terminated early '
               'by achieving avg_reward). Note that the exploration rate is '
               'currently set to decay linearly from start to num_time_steps.'))
@@ -343,18 +347,27 @@ if __name__ == '__main__':
         '--mod_learn', action='store_true'
     )
 
-    parser.add_argument('--min_load_factor', type=float, default=0.8)
-    parser.add_argument('--max_load_factor', type=float, default=1.2)
-    parser.add_argument('--load_on_probability', type=float, default=1.0)
-    parser.add_argument('--lead_pf_probability', type=float, default=0.0)
+    parser.add_argument('--min_load_factor', type=float,
+                        default=MIN_LOAD_FACTOR_DEFAULT)
+    parser.add_argument('--max_load_factor', type=float,
+                        default=MAX_LOAD_FACTOR_DEFAULT)
+    parser.add_argument('--load_on_probability', type=float,
+                        default=LOAD_ON_PROBABILITY_DEFAULT)
+    parser.add_argument('--lead_pf_probability', type=float,
+                        default=LEAD_PF_PROBABILITY_DEFAULT)
+    parser.add_argument('--min_load_pf', type=float,
+                        default=MIN_LOAD_PF_DEFAULT)
+    parser.add_argument('--v_truncate', type=bool, default=False)
 
     # Parse the arguments.
     args_in = parser.parse_args()
 
     if args_in.case == '14':
         case_ = IEEE_14_PWB
+        case_str_ = args_in.case
     elif args_in.case == '14_condensers':
         case_ = IEEE_14_PWB_CONDENSERS
+        case_str_ = args_in.case
     else:
         raise UserWarning('What is going on?')
 
@@ -366,4 +379,5 @@ if __name__ == '__main__':
          max_load_factor=args_in.max_load_factor,
          load_on_probability=args_in.load_on_probability,
          lead_pf_probability=args_in.lead_pf_probability,
-         mod_learn=args_in.mod_learn)
+         mod_learn=args_in.mod_learn, v_truncate=args_in.v_truncate,
+         case_str=case_str_)

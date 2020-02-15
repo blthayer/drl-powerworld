@@ -106,6 +106,7 @@ def plot_testing(df, exp_dir):
     rewards, actions = _get_rewards_actions(df)
     reward_s = rewards['reward']
     action_s = actions['action_taken']
+    _test_reward_hist(s_in=reward_s, save_dir=exp_dir)
     _plot_helper_test(s_in=reward_s, save_dir=exp_dir, term='Reward')
     _plot_helper_test(s_in=action_s, save_dir=exp_dir,
                       term='Action Count')
@@ -139,6 +140,30 @@ def _plot_helper_test(s_in, save_dir, term):
     fig.savefig(os.path.join(save_dir, f'test_{l_term}.png'), format='png')
     fig.savefig(os.path.join(save_dir, f'test_{l_term}.eps'), format='eps')
     plt.close(fig)
+
+
+def _test_reward_hist(s_in, save_dir):
+    # Initialize figure.
+    fig, ax = plt.subplots()
+    # Create histogram.
+    counts, bins, patches = ax.hist(s_in.to_numpy())
+    # Normalize. https://stackoverflow.com/a/22241514/11052174
+    for item in patches:
+        item.set_height(item.get_height()/s_in.shape[0] * 100)
+    ax.set_ybound(0.0, 100.0)
+    ax.set_xlabel('Episode Reward Bins')
+    ax.set_ylabel(f'Percentage of Rewards Falling in Reward Bin')
+    ax.set_title('Normalized Histogram of Testing Episode Rewards')
+    add_value_labels(ax)
+    ax.grid(True, which='major', axis='y')
+    ax.set_xticks(bins)
+    ax.xaxis.set_tick_params(rotation=45)
+    plt.tight_layout()
+    ax.set_axisbelow(True)
+    fig.savefig(os.path.join(save_dir, 'test_reward_hist.png'), format='png')
+    fig.savefig(os.path.join(save_dir, 'test_reward_hist.eps'), format='eps')
+    plt.close(fig)
+    pass
 
 
 def add_value_labels(ax, spacing=5):
@@ -277,13 +302,19 @@ def main(run_dir):
 
 if __name__ == '__main__':
     # Directories to loop over.
-    dir_list = \
-        [os.path.basename(f.path) for f in os.scandir(THIS_DIR) if (f.is_dir())]  # and f.name.startswith('de'))]
+    # dir_list = \
+    #     [os.path.basename(f.path) for f in os.scandir(THIS_DIR) if (f.is_dir() and f.name.startswith('de'))]
     # dir_list = ['gm_con_512_1024', 'gm_con_512_512', 'gm_con_256_512',
     #             'gm_con_256_256', 'gm_con_128_256', 'gm_con_128_128',
     #             'gm_con_64_128', 'gm_con_64_64', 'gm_con_32_64',
     #             'gm_con_32_32', 'gm_64_64']
     #             # 'gm_contingency_128_128_super_long']
+    # dir_list = ['de_hard_branch_and_gen_state_64_128',]
+
+    dir_list = ['de_hard_mod_gen_state_64_128_long',
+                'de_hard_mod_gen_state_512_1024_long',
+                'de_hard_mod_branch_and_gen_state_64_128']
+    exclude_list = []
 
     # Initialize DataFrame to hold summary stats for each run.
     df_ = pd.DataFrame(np.zeros((len(dir_list), 4)),
@@ -294,6 +325,8 @@ if __name__ == '__main__':
 
     for i_, d_ in enumerate(dir_list):
         if d_.startswith('_'):
+            continue
+        if d_ in exclude_list:
             continue
         s_, r_, a_, t_ = loop(d_)
         df_.loc[i_, 'run'] = d_
