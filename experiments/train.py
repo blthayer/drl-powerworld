@@ -205,7 +205,7 @@ def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
     # If we're using pre-screened scenarios, we know that we can count
     # on all power flows to be successful. So, we can confidently set
     # the scenario index to 5000 episodes before the end.
-    if all_match:
+    if all_match and ('gridmind' not in env_name):
         env.scenario_idx = env.num_scenarios - 5000 - 1
 
     if mod_learn:
