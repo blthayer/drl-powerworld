@@ -61,6 +61,30 @@ def plot_training(df, exp_dir):
     _plot_helper_train(s_in=actions, save_dir=exp_dir, term='Action',
                        window=True)
 
+    # Get series of successes.
+    success = _get_success_series(df)
+
+    # Get the rolling 100 episode average.
+    r = success.rolling(100).mean() * 100
+
+    # Get rid of the NaNs at the beginning.
+    r = r[~pd.isna(r)]
+
+    fig, ax = plt.subplots()
+    ax.scatter(x=np.arange(len(r)) + 99, y=r)
+    ax.set_xlabel('Episode Number')
+    ax.set_ylabel(f'Average Success Percentage')
+    ax.set_title(f'100 Episode Average Success Percentage (Sliding Window)')
+    ax.grid(True, 'both')
+    ax.set_axisbelow(True)
+    plt.tight_layout()
+
+    fig.savefig(
+        os.path.join(exp_dir, f'train_success.png'), format='png')
+    fig.savefig(
+        os.path.join(exp_dir, f'train_success.eps'), format='eps')
+    plt.close(fig)
+
     return rewards, actions
 
 
@@ -215,6 +239,33 @@ def add_value_labels(ax, spacing=5):
             va=va)
 
 
+def _get_success_series(df_in):
+    # Get array of NaNs in the "reward" column. This will notate
+    # episode start.
+    ep_start = df_in['reward'].isna().to_numpy()
+
+    # Roll the array backwards so we get an index into the end of
+    # the episode.
+    ep_end = np.roll(ep_start, -1)
+
+    # Extract voltage columns.
+    v_col = df_in.columns[df_in.columns.str.startswith('bus_')]
+
+    # Extract voltage data for the end of each episode. Hard code the
+    # data type and rounding we did in reward evaluation.
+    v_test_end = df_in.loc[ep_end, v_col].astype(np.float32).round(4)
+
+    # Check to see if all voltages are in bounds. This indicates
+    # success.
+    low = v_test_end < np.float32(0.95)
+    high = v_test_end > np.float32(1.05)
+
+    # noinspection PyUnresolvedReferences
+    success_series = ((~low) & (~high)).all(axis=1)
+
+    return success_series
+
+
 def main(run_dir):
     print('*' * 80)
     print(f'RUN DIRECTORY: {run_dir}')
@@ -241,28 +292,8 @@ def main(run_dir):
     train_time = float(m.group(1))
     print(f'Training took {train_time}')
 
-    # Get array of NaNs in the "reward" column. This will notate
-    # episode start.
-    ep_start = df_test['reward'].isna().to_numpy()
-
-    # Roll the array backwards so we get an index into the end of
-    # the episode.
-    ep_end = np.roll(ep_start, -1)
-
-    # Extract voltage columns.
-    v_col = df_test.columns[df_test.columns.str.startswith('bus_')]
-
-    # Extract voltage data for the end of each episode. Hard code the
-    # rounding we did in reward evaluation.
-    v_test_end = df_test.loc[ep_end, v_col].round(6)
-
-    # Check to see if all voltages are in bounds. This indicates
-    # success.
-    low = v_test_end < 0.95
-    high = v_test_end > 1.05
-
-    # noinspection PyUnresolvedReferences
-    pct_success = (~low & ~high).all(axis=1).sum() / v_test_end.shape[0]
+    success_series = _get_success_series(df_test)
+    pct_success = success_series.sum() / success_series.shape[0]
 
     # # Count actions taken per episode in testing.
     # test_episode_actions = \
