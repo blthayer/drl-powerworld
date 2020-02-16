@@ -59,7 +59,8 @@ def callback_factory(average_reward, max_episodes):
 def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
                    callback, policy, case, max_load_factor,
                    min_load_factor, lead_pf_probability,
-                   load_on_probability, mod_learn, v_truncate, case_str):
+                   load_on_probability, mod_learn, v_truncate, case_str,
+                   scale_v_obs, gamma):
     """Use this function to take a shot at replicating the GridMind
     paper: https://arxiv.org/abs/1904.10597
 
@@ -90,6 +91,7 @@ def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
     env_dict['lead_pf_probability'] = lead_pf_probability
     env_dict['load_on_probability'] = load_on_probability
     env_dict['truncate_voltages'] = v_truncate
+    env_dict['scale_voltage_obs'] = scale_v_obs
 
     # Initialize the environment.
     env = gym.make(env_name, **env_dict)
@@ -109,7 +111,7 @@ def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
     print('*' * 120)
     print('*' * 120)
     all_match = False
-    if env_dict_screen is not None:
+    if ('gridmind' not in env_name) and (env_dict_screen is not None):
         all_match = True
         # Compare the important params.
         for key in ['pwb_path', 'num_scenarios', 'max_load_factor',
@@ -163,6 +165,7 @@ def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
     init_dict['seed'] = seed
     init_dict['env'] = env
     init_dict['policy'] = policy
+    init_dict['gamma'] = gamma
 
     # Initialize.
     if mod_learn:
@@ -252,7 +255,7 @@ def test_loop_mod(env, model):
 def loop(out_dir, env_name, runs, hidden_list, num_scenarios,
          avg_reward, num_time_steps, case, min_load_factor,
          max_load_factor, lead_pf_probability, load_on_probability,
-         mod_learn, v_truncate, case_str):
+         mod_learn, v_truncate, case_str, scale_v_obs, gamma):
     """Run the gridmind_reproduce function in a loop."""
     base_dir = os.path.join(THIS_DIR, out_dir)
 
@@ -303,7 +306,8 @@ def loop(out_dir, env_name, runs, hidden_list, num_scenarios,
             lead_pf_probability=lead_pf_probability,
             load_on_probability=load_on_probability,
             max_load_factor=max_load_factor, mod_learn=mod_learn,
-            v_truncate=v_truncate, case_str=case_str
+            v_truncate=v_truncate, case_str=case_str, scale_v_obs=scale_v_obs,
+            gamma=gamma
         )
 
 
@@ -313,14 +317,17 @@ if __name__ == '__main__':
                         type=str)
     parser.add_argument(
         'env', help='Gym PowerWorld environment to use.', type=str,
-        choices=['powerworld-gridmind-env-v0',
-                 'powerworld-gridmind-contingencies-env-v0',
-                 'powerworld-gridmind-hard-env-v0',
-                 'powerworld-discrete-env-simple-14-bus-v0',
-                 'powerworld-discrete-env-gen-state-14-bus-v0',
-                 'powerworld-discrete-env-branch-state-14-bus-v0',
-                 'powerworld-discrete-env-branch-and-gen-state-14-bus-v0'
-                 ])
+        choices=[
+            'powerworld-gridmind-env-v0',
+            'powerworld-gridmind-contingencies-env-v0',
+            'powerworld-gridmind-hard-env-v0',
+            'powerworld-discrete-env-simple-14-bus-v0',
+            'powerworld-discrete-env-gen-state-14-bus-v0',
+            'powerworld-discrete-env-branch-state-14-bus-v0',
+            'powerworld-discrete-env-branch-and-gen-state-14-bus-v0',
+            'powerworld-discrete-env-branch-and-gen-state-clipped-reward-14-bus-v0'
+        ])
+    
     parser.add_argument(
         'case', help='Case to use.', type=str, choices=['14', '14_condensers'])
     parser.add_argument('--num_runs', help='Number of times to train.',
@@ -357,7 +364,9 @@ if __name__ == '__main__':
                         default=LEAD_PF_PROBABILITY_DEFAULT)
     parser.add_argument('--min_load_pf', type=float,
                         default=MIN_LOAD_PF_DEFAULT)
-    parser.add_argument('--v_truncate', type=bool, default=False)
+    parser.add_argument('--v_truncate', action='store_true')
+    parser.add_argument('--scale_v_obs', action='store_true')
+    parser.add_argument('--gamma', type=float, default=1.0)
 
     # Parse the arguments.
     args_in = parser.parse_args()
@@ -380,4 +389,5 @@ if __name__ == '__main__':
          load_on_probability=args_in.load_on_probability,
          lead_pf_probability=args_in.lead_pf_probability,
          mod_learn=args_in.mod_learn, v_truncate=args_in.v_truncate,
-         case_str=case_str_)
+         case_str=case_str_, scale_v_obs=args_in.scale_v_obs,
+         gamma=args_in.gamma)

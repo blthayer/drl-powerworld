@@ -92,12 +92,10 @@ BASELINES_DICT = dict(
     prioritized_replay=True,
     # Go all the way down to 1%.
     exploration_final_eps=0.01,
-    # Set gamma to 1.0, since there are already incentives built-in for
-    # minimizing the number of actions.
-    gamma=1.0,
     # Have exploration linearly decay based on total_timesteps.
     exploration_fraction=1.0,
     # Update the following:
+    # gamma=1.0,
     # policy=policy
     # seed=seed
     # env=env
