@@ -14,6 +14,9 @@ IEEE_14_PWB_CONDENSERS = os.path.join(IEEE_14_DIR,
 IEEE_14_ONELINE_AXD = os.path.join(IEEE_14_DIR, 'IEEE 14 bus.axd')
 IEEE_14_CONTOUR_AXD = os.path.join(IEEE_14_DIR, 'contour.axd')
 
+# Write to a faster SSD to make life better.
+DATA_DIR = r'D:\\runs'
+
 # Defines some defaults.
 MIN_LOAD_FACTOR_DEFAULT = 0.6
 MAX_LOAD_FACTOR_DEFAULT = 1.4

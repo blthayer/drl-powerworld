@@ -1,5 +1,5 @@
 # noinspection PyUnresolvedReferences
-from constants import THIS_DIR
+from constants import THIS_DIR, DATA_DIR
 import pandas as pd
 import os
 import numpy as np
@@ -29,7 +29,7 @@ def loop(in_dir):
 
     for i, this_d in enumerate(sub_dirs):
         pct_success, mean_reward, num_test_actions, train_time = main(
-            os.path.join(THIS_DIR, in_dir, this_d))
+            os.path.join(DATA_DIR, in_dir, this_d))
 
         pct_success_arr[i] = pct_success
         mean_reward_arr[i] = mean_reward

@@ -23,7 +23,7 @@ from constants import THIS_DIR, IEEE_14_PWB, IEEE_14_PWB_CONDENSERS, \
     MIN_LOAD_FACTOR_DEFAULT, MAX_LOAD_FACTOR_DEFAULT, \
     LOAD_ON_PROBABILITY_DEFAULT, LEAD_PF_PROBABILITY_DEFAULT, \
     NUM_TIME_STEPS_DEFAULT, NUM_SCENARIOS_DEFAULT, NUM_RUNS_DEFAULT, \
-    get_file_str, MIN_LOAD_PF_DEFAULT
+    get_file_str, MIN_LOAD_PF_DEFAULT, DATA_DIR
 
 
 def callback_factory(average_reward, max_episodes):
@@ -257,7 +257,7 @@ def loop(out_dir, env_name, runs, hidden_list, num_scenarios,
          max_load_factor, lead_pf_probability, load_on_probability,
          mod_learn, v_truncate, case_str, scale_v_obs, gamma):
     """Run the gridmind_reproduce function in a loop."""
-    base_dir = os.path.join(THIS_DIR, out_dir)
+    base_dir = os.path.join(DATA_DIR, out_dir)
 
     # Make the directory. Don't worry if it exists already.
     try:
