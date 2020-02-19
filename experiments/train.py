@@ -23,7 +23,7 @@ from constants import THIS_DIR, IEEE_14_PWB, IEEE_14_PWB_CONDENSERS, \
     MIN_LOAD_FACTOR_DEFAULT, MAX_LOAD_FACTOR_DEFAULT, \
     LOAD_ON_PROBABILITY_DEFAULT, LEAD_PF_PROBABILITY_DEFAULT, \
     NUM_TIME_STEPS_DEFAULT, NUM_SCENARIOS_DEFAULT, NUM_RUNS_DEFAULT, \
-    get_file_str, MIN_LOAD_PF_DEFAULT, DATA_DIR
+    get_file_str, MIN_LOAD_PF_DEFAULT, DATA_DIR, TEST_EPISODES
 
 
 def callback_factory(average_reward, max_episodes):
@@ -207,9 +207,9 @@ def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
 
     # If we're using pre-screened scenarios, we know that we can count
     # on all power flows to be successful. So, we can confidently set
-    # the scenario index to 5000 episodes before the end.
+    # the scenario index to TEST_EPISODES episodes before the end.
     if all_match and screen:
-        env.scenario_idx = env.num_scenarios - 5000 - 1
+        env.scenario_idx = env.num_scenarios - TEST_EPISODES - 1
 
     if mod_learn:
         test_loop_mod(env, model)
@@ -221,7 +221,7 @@ def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
 
 
 def test_loop(env, model):
-    for _ in range(5000):
+    for _ in range(TEST_EPISODES):
         obs = env.reset()
         done = False
 
@@ -233,7 +233,7 @@ def test_loop(env, model):
 
 def test_loop_mod(env, model):
     action_list = list()
-    for _ in range(5000):
+    for _ in range(TEST_EPISODES):
         # Get the environment ready.
         obs = env.reset()
         done = False

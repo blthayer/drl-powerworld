@@ -1,5 +1,5 @@
 # noinspection PyUnresolvedReferences
-from constants import THIS_DIR, DATA_DIR
+from constants import THIS_DIR, DATA_DIR, TEST_EPISODES
 from gym_powerworld.envs.voltage_control_env import V_TOL
 import pandas as pd
 import os
@@ -295,7 +295,7 @@ def main(run_dir):
 
     success_series = _get_success_series(df_test)
     pct_success = success_series.sum() / success_series.shape[0]
-    assert success_series.shape[0] == 5000
+    assert success_series.shape[0] == TEST_EPISODES
 
     # # Count actions taken per episode in testing.
     # test_episode_actions = \
@@ -317,7 +317,7 @@ def main(run_dir):
         ep_start.loc[:,
         ep_start.columns[ep_start.columns.str.startswith('bus_')]].round(6)
 
-    # assert test_v.shape == (5000, 14)
+    # assert test_v.shape == (TEST_EPISODES, 14)
 
     under_voltage = (test_v < 0.95).sum(axis=1)
     over_voltage = (test_v > 1.05).sum(axis=1)

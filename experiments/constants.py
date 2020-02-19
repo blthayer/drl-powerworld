@@ -36,6 +36,9 @@ NUM_RUNS_DEFAULT = 3
 
 SCREEN_DIR_14 = os.path.join(THIS_DIR, 'screen_14')
 
+# How much testing we're doing.
+TEST_EPISODES = 5000
+
 # Dictionary of GridMind environment inputs.
 ENV_DICT = dict(
     # Five voltage bins: [0.95, 0.975, 1.0, 1.025, 1.05]
