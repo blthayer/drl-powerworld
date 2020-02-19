@@ -60,7 +60,7 @@ def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
                    callback, policy, case, max_load_factor,
                    min_load_factor, lead_pf_probability,
                    load_on_probability, mod_learn, v_truncate, case_str,
-                   scale_v_obs, gamma):
+                   scale_v_obs, clipped_r, gamma):
     """Use this function to take a shot at replicating the GridMind
     paper: https://arxiv.org/abs/1904.10597
 
@@ -92,6 +92,7 @@ def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
     env_dict['load_on_probability'] = load_on_probability
     env_dict['truncate_voltages'] = v_truncate
     env_dict['scale_voltage_obs'] = scale_v_obs
+    env_dict['clipped_reward'] = clipped_r
 
     # Initialize the environment.
     env = gym.make(env_name, **env_dict)
@@ -257,7 +258,7 @@ def test_loop_mod(env, model):
 def loop(out_dir, env_name, runs, hidden_list, num_scenarios,
          avg_reward, num_time_steps, case, min_load_factor,
          max_load_factor, lead_pf_probability, load_on_probability,
-         mod_learn, v_truncate, case_str, scale_v_obs, gamma):
+         mod_learn, v_truncate, case_str, scale_v_obs, clipped_r, gamma):
     """Run the gridmind_reproduce function in a loop."""
     base_dir = os.path.join(DATA_DIR, out_dir)
 
@@ -309,7 +310,7 @@ def loop(out_dir, env_name, runs, hidden_list, num_scenarios,
             load_on_probability=load_on_probability,
             max_load_factor=max_load_factor, mod_learn=mod_learn,
             v_truncate=v_truncate, case_str=case_str, scale_v_obs=scale_v_obs,
-            gamma=gamma
+            clipped_r=clipped_r, gamma=gamma
         )
 
 
@@ -367,6 +368,7 @@ if __name__ == '__main__':
                         default=MIN_LOAD_PF_DEFAULT)
     parser.add_argument('--v_truncate', action='store_true')
     parser.add_argument('--scale_v_obs', action='store_true')
+    parser.add_argument('--clipped_r', action='store_true')
     parser.add_argument('--gamma', type=float, default=0.99)
 
     # Parse the arguments.
@@ -391,4 +393,4 @@ if __name__ == '__main__':
          lead_pf_probability=args_in.lead_pf_probability,
          mod_learn=args_in.mod_learn, v_truncate=args_in.v_truncate,
          case_str=case_str_, scale_v_obs=args_in.scale_v_obs,
-         gamma=args_in.gamma)
+         clipped_r=args_in.clipped_r, gamma=args_in.gamma)
