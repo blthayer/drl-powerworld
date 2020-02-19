@@ -88,11 +88,8 @@ def main(case_str, random, mod, env_name):
         if random:
             env.action_space.seed(seed=seed)
         else:
-            # Get a graph of the network.
-            graph = get_network_graph(env)
-
             # Extract nodes with generators. Ensure list is sorted.
-            gen_buses = [x for x, y in graph.nodes(data=True) if y['gen']]
+            gen_buses = env.gen_init_data['BusNum'].tolist()
             gen_buses.sort()
 
             # For the graph technique, we'll be setting gens to the
@@ -112,6 +109,9 @@ def main(case_str, random, mod, env_name):
                 # Get generators which are on.
                 # noinspection PyUnboundLocalVariable
                 gens_on = np.array(gen_buses)[env.gen_status_arr.astype(bool)]
+
+                # Get a graph for this episode.
+                graph = get_network_graph(env)
 
             # Clear the action list.
             action_list.clear()
@@ -242,39 +242,32 @@ def get_network_graph(env):
 
         # Pull the values out of the string. This is crude, but works.
         idx = [int(x) for x in
-               re.split('Ybus\(', idx_str)[1].replace(')', '').split(',')]
+               re.split(',',
+                        re.match('(?:Ybus\()(.*)(?:\))', idx_str).group(1))]
 
         # Not working with diagonals.
         if idx[0] == idx[1]:
             continue
 
         # Remove parentheses from the value_str.
-        value_str = value_str.replace(')', '').replace('(', '')
+        value_str = re.sub('(?:\()(.*)(?:\))', lambda m: m.group(1), value_str)
 
         # Split by the '+j*'
         val_list = [float(x) for x in re.split('\+j\*', value_str)]
 
         # Create complex number, invert and multiply by -1 to convert
         # admittance to impedance.
-        cplx = -1 / (val_list[0] + 1j * val_list[1])
+        try:
+            cplx = -1 / (val_list[0] + 1j * val_list[1])
+        except ZeroDivisionError:
+            # Move along if the buses are not connected.
+            continue
 
         # Extract the reactance.
         x = cplx.imag
 
         # Add to the graph.
         g.add_edge(idx[0], idx[1], x=x)
-
-    # Extract generator data.
-    kf = env.saw.get_key_field_list('gen')
-    gens = env.saw.GetParametersMultipleElement(
-        ObjectType='gen', ParamList=kf
-    )
-    # Get a set of generator buses.
-    gen_buses = set(gens['BusNum'].to_numpy(dtype=int))
-
-    # Add generators to nodes.
-    for n in g.nodes:
-        g.nodes[n]['gen'] = n in gen_buses
 
     return g
 
