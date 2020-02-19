@@ -1,10 +1,11 @@
 # Baselines hasn't finalized the switch to tensorflow 2.0, so we'll
 # use the final 1.x release, which included GPU support.
 # https://www.tensorflow.org/install/pip
-tensorflow-gpu>=1.15, <2.0
+tensorflow>=1.15, <2.0
 # Simply use the latest gym from PyPi. Include atari for testing.
 gym[atari]
 numpy
 pandas>=0.24
 matplotlib
 stable-baselines
+networkx
