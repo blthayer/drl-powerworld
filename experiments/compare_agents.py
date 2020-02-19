@@ -196,8 +196,6 @@ def get_graph_action(env, graph, obs, gens_on, starting_action_num):
             if np.isclose(v_set, 1.05, rtol=0.0, atol=V_TOL):
                 continue
 
-            print(f'gen_bus: {gen_bus}', flush=True)
-
             # Determine what action we need and stop looping.
             action = starting_action_num + np.argmax(gen_mask)
             break
