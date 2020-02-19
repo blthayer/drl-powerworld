@@ -57,10 +57,8 @@ def _get_rewards_actions(df):
 def plot_training(df, exp_dir):
     rewards, actions = _get_rewards_actions(df)
 
-    _plot_helper_train(s_in=rewards, save_dir=exp_dir, term='Reward',
-                       window=True)
-    _plot_helper_train(s_in=actions, save_dir=exp_dir, term='Action',
-                       window=True)
+    _plot_helper_train(s_in=rewards, save_dir=exp_dir, term='Reward')
+    _plot_helper_train(s_in=actions, save_dir=exp_dir, term='Action')
 
     # Get series of successes.
     success = _get_success_series(df)
@@ -89,42 +87,28 @@ def plot_training(df, exp_dir):
     return rewards, actions
 
 
-def _plot_helper_train(s_in, save_dir, term, window=True):
+def _plot_helper_train(s_in, save_dir, term):
     l_term = term.lower()
-    # Plot all points.
-    fig1, ax1 = plt.subplots()
-    ax1.scatter(x=np.arange(len(s_in)), y=s_in.to_numpy())
-    ax1.set_title(f'Total Training Episode {term}s per Episode')
-    ax1.set_xlabel('Episode Number')
-    ax1.set_ylabel(f'Total Episode {term}s')
-    ax1.grid(True, 'both')
-    ax1.set_axisbelow(True)
+
+    # Do a 100 episode rolling average.
+    rolling = s_in.rolling(100).mean().to_numpy()
+    # Get rid of the NaNs at the beginning.
+    rolling = rolling[~pd.isna(rolling)]
+    assert len(rolling) == len(s_in) - 99
+    fig2, ax2 = plt.subplots()
+    ax2.scatter(x=np.arange(len(rolling)) + 99, y=rolling)
+    ax2.set_xlabel('Episode Number')
+    ax2.set_ylabel(f'Average Total Episode {term}s')
+    ax2.set_title(f'100 Episode Average Episode {term}s (Sliding Window)')
+    ax2.grid(True, 'both')
+    ax2.set_axisbelow(True)
     plt.tight_layout()
 
-    fig1.savefig(os.path.join(save_dir, f'episode_{l_term}.png'), format='png')
-    fig1.savefig(os.path.join(save_dir, f'episode_{l_term}.eps'), format='eps')
-    plt.close(fig1)
-
-    if window:
-        # Do a 100 episode rolling average.
-        rolling = s_in.rolling(100).mean().to_numpy()
-        # Get rid of the NaNs at the beginning.
-        rolling = rolling[~pd.isna(rolling)]
-        assert len(rolling) == len(s_in) - 99
-        fig2, ax2 = plt.subplots()
-        ax2.scatter(x=np.arange(len(rolling)) + 99, y=rolling)
-        ax2.set_xlabel('Episode Number')
-        ax2.set_ylabel(f'Average Total Episode {term}s')
-        ax2.set_title(f'100 Episode Average Episode {term}s (Sliding Window)')
-        ax2.grid(True, 'both')
-        ax2.set_axisbelow(True)
-        plt.tight_layout()
-
-        fig2.savefig(
-            os.path.join(save_dir, f'average_{l_term}.png'), format='png')
-        fig2.savefig(
-            os.path.join(save_dir, f'average_{l_term}.eps'), format='eps')
-        plt.close(fig2)
+    fig2.savefig(
+        os.path.join(save_dir, f'average_{l_term}.png'), format='png')
+    fig2.savefig(
+        os.path.join(save_dir, f'average_{l_term}.eps'), format='eps')
+    plt.close(fig2)
 
 
 def plot_testing(df, exp_dir):
@@ -132,7 +116,7 @@ def plot_testing(df, exp_dir):
     reward_s = rewards['reward']
     action_s = actions['action_taken']
     _test_reward_hist(s_in=reward_s, save_dir=exp_dir)
-    _plot_helper_test(s_in=reward_s, save_dir=exp_dir, term='Reward')
+    # _plot_helper_test(s_in=reward_s, save_dir=exp_dir, term='Reward')
     _plot_helper_test(s_in=action_s, save_dir=exp_dir,
                       term='Action Count')
 
@@ -252,8 +236,7 @@ def _get_success_series(df_in):
     # Extract voltage columns.
     v_col = df_in.columns[df_in.columns.str.startswith('bus_')]
 
-    # Extract voltage data for the end of each episode. Hard code the
-    # data type and rounding we did in reward evaluation.
+    # Extract voltage data for the end of each episode.
     v_test_end = df_in.loc[ep_end, v_col]
 
     # Check to see if all voltages are in bounds. This indicates
@@ -273,10 +256,14 @@ def main(run_dir):
     print('')
 
     # Load training data.
-    df_train = pd.read_csv(os.path.join(run_dir, 'log_train.csv'))
-
-    # Plot training rewards.
-    train_rewards, train_actions = plot_training(df=df_train, exp_dir=run_dir)
+    try:
+        df_train = pd.read_csv(os.path.join(run_dir, 'log_train.csv'))
+    except FileNotFoundError:
+        pass
+    else:
+        # Plot training rewards.
+        train_rewards, train_actions = \
+            plot_training(df=df_train, exp_dir=run_dir)
 
     # Load testing data.
     df_test = pd.read_csv(os.path.join(run_dir, 'log_test.csv'))
@@ -285,13 +272,16 @@ def main(run_dir):
     test_rewards, test_actions = plot_testing(df=df_test, exp_dir=run_dir)
 
     # Read the info file.
-    with open(os.path.join(run_dir, 'info.txt'), 'r') as f:
-        s = f.read()
-
-    # Extract the run time.
-    m = re.match('(?:Training took\s)(.+)(?:\sseconds.)', s)
-    train_time = float(m.group(1))
-    print(f'Training took {train_time}')
+    try:
+        with open(os.path.join(run_dir, 'info.txt'), 'r') as f:
+            s = f.read()
+    except FileNotFoundError:
+        train_time = np.nan
+    else:
+        # Extract the run time.
+        m = re.match('(?:Training took\s)(.+)(?:\sseconds.)', s)
+        train_time = float(m.group(1))
+        print(f'Training took {train_time}')
 
     success_series = _get_success_series(df_test)
     pct_success = success_series.sum() / success_series.shape[0]
@@ -309,23 +299,23 @@ def main(run_dir):
     print('Description of testing episode rewards:')
     print(test_ep_rewards.describe())
 
-    # Let's examine voltage issues.
-    # We want the NaN action_taken values, because they denote the start
-    # of an episode.
-    ep_start = df_test.loc[pd.isna(df_test['action_taken']), :]
-    test_v = \
-        ep_start.loc[:,
-        ep_start.columns[ep_start.columns.str.startswith('bus_')]].round(6)
-
-    # assert test_v.shape == (TEST_EPISODES, 14)
-
-    under_voltage = (test_v < 0.95).sum(axis=1)
-    over_voltage = (test_v > 1.05).sum(axis=1)
-
-    print('Description of under voltages in testing set:')
-    print(under_voltage.describe())
-    print('Description of over voltages in testing set:')
-    print(over_voltage.describe())
+    # # Let's examine voltage issues.
+    # # We want the NaN action_taken values, because they denote the start
+    # # of an episode.
+    # ep_start = df_test.loc[pd.isna(df_test['action_taken']), :]
+    # test_v = \
+    #     ep_start.loc[:,
+    #         ep_start.columns[ep_start.columns.str.startswith('bus_')]].round(6)
+    #
+    # # assert test_v.shape == (TEST_EPISODES, 14)
+    #
+    # under_voltage = (test_v < 0.95).sum(axis=1)
+    # over_voltage = (test_v > 1.05).sum(axis=1)
+    #
+    # print('Description of under voltages in testing set:')
+    # print(under_voltage.describe())
+    # print('Description of over voltages in testing set:')
+    # print(over_voltage.describe())
 
     # Return percent success, mean reward, and num unique testing
     # actions. Subtract one since we have np.nan in there for actions.
