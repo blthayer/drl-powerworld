@@ -111,7 +111,9 @@ def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
     print('*' * 120)
     print('*' * 120)
     all_match = False
-    if ('gridmind' not in env_name) and (env_dict_screen is not None):
+    screen = (('gridmind' not in env_name)
+              or (env_name == 'powerworld-gridmind-hard-env-v0'))
+    if screen:
         all_match = True
         # Compare the important params.
         for key in ['pwb_path', 'num_scenarios', 'max_load_factor',
@@ -205,7 +207,7 @@ def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
     # If we're using pre-screened scenarios, we know that we can count
     # on all power flows to be successful. So, we can confidently set
     # the scenario index to 5000 episodes before the end.
-    if all_match and ('gridmind' not in env_name):
+    if all_match and screen:
         env.scenario_idx = env.num_scenarios - 5000 - 1
 
     if mod_learn:
@@ -366,7 +368,7 @@ if __name__ == '__main__':
                         default=MIN_LOAD_PF_DEFAULT)
     parser.add_argument('--v_truncate', action='store_true')
     parser.add_argument('--scale_v_obs', action='store_true')
-    parser.add_argument('--gamma', type=float, default=1.0)
+    parser.add_argument('--gamma', type=float, default=0.99)
 
     # Parse the arguments.
     args_in = parser.parse_args()

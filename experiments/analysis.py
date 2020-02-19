@@ -1,5 +1,6 @@
 # noinspection PyUnresolvedReferences
 from constants import THIS_DIR, DATA_DIR
+from gym_powerworld.envs.voltage_control_env import V_TOL
 import pandas as pd
 import os
 import numpy as np
@@ -253,12 +254,12 @@ def _get_success_series(df_in):
 
     # Extract voltage data for the end of each episode. Hard code the
     # data type and rounding we did in reward evaluation.
-    v_test_end = df_in.loc[ep_end, v_col].astype(np.float32).round(4)
+    v_test_end = df_in.loc[ep_end, v_col]
 
     # Check to see if all voltages are in bounds. This indicates
     # success.
-    low = v_test_end < np.float32(0.95)
-    high = v_test_end > np.float32(1.05)
+    low = v_test_end < (0.95 - V_TOL)
+    high = v_test_end > (1.05 + V_TOL)
 
     # noinspection PyUnresolvedReferences
     success_series = ((~low) & (~high)).all(axis=1)
@@ -294,6 +295,7 @@ def main(run_dir):
 
     success_series = _get_success_series(df_test)
     pct_success = success_series.sum() / success_series.shape[0]
+    assert success_series.shape[0] == 5000
 
     # # Count actions taken per episode in testing.
     # test_episode_actions = \
@@ -333,8 +335,8 @@ def main(run_dir):
 
 if __name__ == '__main__':
     # Directories to loop over.
-    # dir_list = \
-    #     [os.path.basename(f.path) for f in os.scandir(THIS_DIR) if (f.is_dir() and f.name.startswith('de'))]
+    dir_list = \
+        [os.path.basename(f.path) for f in os.scandir(DATA_DIR) if f.is_dir()]
     # dir_list = ['gm_con_512_1024', 'gm_con_512_512', 'gm_con_256_512',
     #             'gm_con_256_256', 'gm_con_128_256', 'gm_con_128_128',
     #             'gm_con_64_128', 'gm_con_64_64', 'gm_con_32_64',
@@ -359,7 +361,7 @@ if __name__ == '__main__':
             continue
         if d_ in exclude_list:
             continue
-        s_, r_, a_, t_ = loop(d_)
+        s_, r_, a_, t_ = loop(os.path.join(DATA_DIR, d_))
         df_.loc[i_, 'run'] = d_
         df_.loc[i_, 'pct_success'] = s_
         df_.loc[i_, 'mean_reward'] = r_
