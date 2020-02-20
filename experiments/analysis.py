@@ -24,20 +24,23 @@ def loop(in_dir):
         [os.path.basename(f.path) for f in os.scandir(in_dir) if f.is_dir()]
 
     pct_success_arr = np.zeros(len(sub_dirs))
+    oob_success_arr = np.zeros_like(pct_success_arr)
     mean_reward_arr = np.zeros_like(pct_success_arr)
     num_test_actions_arr = np.zeros_like(pct_success_arr)
     time_arr = np.zeros_like(pct_success_arr)
 
     for i, this_d in enumerate(sub_dirs):
-        pct_success, mean_reward, num_test_actions, train_time = main(
-            os.path.join(DATA_DIR, in_dir, this_d))
+        pct_success, oob_success, mean_reward, num_test_actions, train_time =\
+            main(os.path.join(DATA_DIR, in_dir, this_d))
 
         pct_success_arr[i] = pct_success
+        oob_success_arr[i] = oob_success
         mean_reward_arr[i] = mean_reward
         num_test_actions_arr[i] = num_test_actions
         time_arr[i] = train_time
 
     df = pd.DataFrame({'Success Percentage': pct_success_arr,
+                       'Success Percentage Start OOB': oob_success_arr,
                        'Mean Reward': mean_reward_arr,
                        'Num Test Actions': num_test_actions_arr,
                        'Training time': time_arr})
@@ -45,8 +48,8 @@ def loop(in_dir):
 
     # It's okay to take means of means since all our tests have the
     # same number of samples.
-    return pct_success_arr.mean(), mean_reward_arr.mean(), \
-        num_test_actions_arr.mean(), time_arr.mean()
+    return pct_success_arr.mean(), oob_success_arr.mean(), \
+        mean_reward_arr.mean(), num_test_actions_arr.mean(), time_arr.mean()
 
 
 def _get_rewards_actions(df):
@@ -61,7 +64,7 @@ def plot_training(df, exp_dir):
     _plot_helper_train(s_in=actions, save_dir=exp_dir, term='Action')
 
     # Get series of successes.
-    success = _get_success_series(df)
+    success, start_oob = _get_success_series(df)
 
     # Get the rolling 100 episode average.
     r = success.rolling(100).mean() * 100
@@ -239,15 +242,21 @@ def _get_success_series(df_in):
     # Extract voltage data for the end of each episode.
     v_test_end = df_in.loc[ep_end, v_col]
 
+    # Extract voltage data for the start of each episode.
+    v_test_start = df_in.loc[ep_start, v_col]
+
     # Check to see if all voltages are in bounds. This indicates
     # success.
-    low = v_test_end < (0.95 - V_TOL)
-    high = v_test_end > (1.05 + V_TOL)
+    low_end = v_test_end < (0.95 - V_TOL)
+    high_end = v_test_end > (1.05 + V_TOL)
+    low_start = v_test_start < (0.95 - V_TOL)
+    high_start = v_test_start > (1.05 + V_TOL)
 
     # noinspection PyUnresolvedReferences
-    success_series = ((~low) & (~high)).all(axis=1)
+    success_series = ((~low_end) & (~high_end)).all(axis=1)
+    start_oob = (low_start | high_start).any(axis=1)
 
-    return success_series
+    return success_series, start_oob
 
 
 def main(run_dir):
@@ -283,9 +292,15 @@ def main(run_dir):
         train_time = float(m.group(1))
         print(f'Training took {train_time}')
 
-    success_series = _get_success_series(df_test)
+    # Get series related to the testing success.
+    success_series, start_oob_series = _get_success_series(df_test)
+    # Compute overall testing success.
     pct_success = success_series.sum() / success_series.shape[0]
+    # Compute success for episodes which started out of bounds
+    oob_success = (success_series[start_oob_series.to_numpy()].sum()
+                   / start_oob_series.sum())
     assert success_series.shape[0] == TEST_EPISODES
+    assert start_oob_series.shape[0] == TEST_EPISODES
 
     # # Count actions taken per episode in testing.
     # test_episode_actions = \
@@ -319,8 +334,8 @@ def main(run_dir):
 
     # Return percent success, mean reward, and num unique testing
     # actions. Subtract one since we have np.nan in there for actions.
-    return pct_success, test_rewards.mean()[0], test_actions.shape[0] - 1, \
-        train_time
+    return pct_success, oob_success, test_rewards.mean()[0],\
+        test_actions.shape[0] - 1, train_time
 
 
 if __name__ == '__main__':
@@ -340,9 +355,9 @@ if __name__ == '__main__':
     exclude_list = []
 
     # Initialize DataFrame to hold summary stats for each run.
-    df_ = pd.DataFrame(np.zeros((len(dir_list), 4)),
-                       columns=['run', 'pct_success', 'mean_reward',
-                                'mean_num_actions'])
+    df_ = pd.DataFrame(np.zeros((len(dir_list), 5)),
+                       columns=['run', 'pct_success', 'pct_success_oob',
+                                'mean_reward', 'mean_num_actions'])
 
     df_['run'] = ''
 
@@ -351,9 +366,10 @@ if __name__ == '__main__':
             continue
         if d_ in exclude_list:
             continue
-        s_, r_, a_, t_ = loop(os.path.join(DATA_DIR, d_))
+        s_, s_oob, r_, a_, t_ = loop(os.path.join(DATA_DIR, d_))
         df_.loc[i_, 'run'] = d_
         df_.loc[i_, 'pct_success'] = s_
+        df_.loc[i_, 'pct_success_oob'] = s_oob
         df_.loc[i_, 'mean_reward'] = r_
         df_.loc[i_, 'mean_num_actions'] = a_
         df_.loc[i_, 'mean_train_time'] = t_
