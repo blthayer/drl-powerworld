@@ -25,14 +25,17 @@ import re
 from gym_powerworld.envs.voltage_control_env import V_TOL
 
 
-def main(case_str, random, mod, env_name):
+def main(case_str, random, mod, env_name, clipped_r):
     # Primary output directory.
     if random:
         s = 'random'
     else:
         s = 'graph'
 
-    d = os.path.join(DATA_DIR, f'{s}_agent_{case_str}')
+    if not clipped_r:
+        d = os.path.join(DATA_DIR, f'{s}_agent_{case_str}')
+    else:
+        d = os.path.join(DATA_DIR, f'{s}_agent_clipped_reward_{case_str}')
 
     if mod:
         d = d + '_mod'
@@ -69,6 +72,9 @@ def main(case_str, random, mod, env_name):
 
         # Override case path.
         env_dict['pwb_path'] = case_path
+
+        # Set the reward clipping.
+        env_dict['clipped_reward'] = clipped_r
 
         # Load up the mask.
         with open(f'mask{fs}.pkl', 'rb') as f:
@@ -273,9 +279,23 @@ def get_network_graph(env):
 
 
 if __name__ == '__main__':
+    # Random:
     # main(case_str='14', random=True, mod=False,
-    #      env_name='powerworld-discrete-env-simple-14-bus-v0')
+    #      env_name='powerworld-discrete-env-simple-14-bus-v0',
+    #      clipped_r=False)
     # main(case_str='14', random=True, mod=True,
-    #      env_name='powerworld-discrete-env-simple-14-bus-v0')
+    #      env_name='powerworld-discrete-env-simple-14-bus-v0',
+    #      clipped_r=False)
+    main(case_str='14', random=True, mod=False,
+         env_name='powerworld-discrete-env-simple-14-bus-v0',
+         clipped_r=True)
+    main(case_str='14', random=True, mod=True,
+         env_name='powerworld-discrete-env-simple-14-bus-v0',
+         clipped_r=True)
+    # Graph:
+    # main(case_str='14', random=False, mod=False,
+    #      env_name='powerworld-discrete-env-simple-14-bus-v0',
+    #      clipped_r=False)
     main(case_str='14', random=False, mod=False,
-         env_name='powerworld-discrete-env-simple-14-bus-v0')
+         env_name='powerworld-discrete-env-simple-14-bus-v0',
+         clipped_r=True)
