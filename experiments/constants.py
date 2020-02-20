@@ -111,5 +111,5 @@ BASELINES_DICT = dict(
 )
 
 
-def get_file_str(case_str, seed, v_truncate):
-    return f'_{case_str}_{seed}_{int(v_truncate)}'
+def get_file_str(case_str, seed, contingencies):
+    return f'_{case_str}_{seed}_{int(contingencies)}'

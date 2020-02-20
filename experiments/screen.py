@@ -40,11 +40,11 @@ ENV_DICT_FILLED['log_level'] = logging.ERROR
 LOG.setLevel(logging.INFO)
 
 
-def run(seed, v_truncate, case_path, env_id, case_str, log_queue):
+def run(seed, contingencies, case_path, env_id, case_str, log_queue):
     """
     :param seed: Seed for random numbers.
-    :param v_truncate: Boolean passed to environment for forcing
-        voltages within certain band.
+    :param contingencies: Boolean flag indicating if this environment is applying
+        contingencies or not.
     :param case_path: Full path to the PowerWorld case.
     :param env_id: String corresponding to the ID of the environment to
         use. Passed directly to gym.make.
@@ -58,12 +58,13 @@ def run(seed, v_truncate, case_path, env_id, case_str, log_queue):
 
     # Update the seed, voltage truncation, and case path.
     ed['seed'] = seed
-    ed['truncate_voltages'] = v_truncate
     ed['pwb_path'] = case_path
+    # Always truncate voltages.
+    ed['truncate_voltages'] = True
 
     # Use the following to encode files of various sorts.
     file_str = get_file_str(case_str=case_str, seed=seed,
-                            v_truncate=v_truncate)
+                            contingencies=contingencies)
 
     # Train logfile will be a combination of the seed and v_truncate.
     log = 'log' + file_str + '.csv'
@@ -114,7 +115,7 @@ def log_progress(q: mp.Queue):
         LOG.info(m)
 
 
-def main(env_id, case_path, case_str):
+def main(env_id, case_path, case_str, contingencies):
     # Create logging queue.
     lq = mp.Queue()
 
@@ -129,11 +130,11 @@ def main(env_id, case_path, case_str):
     for seed in range(NUM_RUNS_DEFAULT):
         kwargs = {
             'seed': seed,
-            'v_truncate': True,
             'case_path': case_path,
             'env_id': env_id,
             'case_str': case_str,
-            'log_queue': lq
+            'log_queue': lq,
+            'contingencies': contingencies
         }
         p = mp.Process(target=run, kwargs=kwargs)
         processes.append(p)
@@ -178,7 +179,13 @@ if __name__ == '__main__':
     else:
         raise ValueError()
 
+    if args_in.env == 'powerworld-discrete-env-gen-shunt-no-contingencies-v0':
+        contingencies_ = False
+    else:
+        contingencies_ = True
+
     ENV_DICT['num_scenarios'] = args_in.num_scenarios
 
     # Run.
-    main(env_id=args_in.env, case_path=pwb_path, case_str=args_in.case)
+    main(env_id=args_in.env, case_path=pwb_path, case_str=args_in.case,
+         contingencies=contingencies_)

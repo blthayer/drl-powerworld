@@ -60,7 +60,8 @@ def main(case_str, random, mod, env_name, clipped_r):
         os.mkdir(run_dir)
 
         # Get a file string so we can load up the environment dict.
-        fs = get_file_str(case_str=case_str, seed=seed, v_truncate=True)
+        # TODO: Add logic for contingencies based on name, like done in screen.py
+        fs = get_file_str(case_str=case_str, seed=seed, contingencies=True)
         with open(f'env_input{fs}.json', 'r') as f:
             env_dict = json.load(f)
 

@@ -98,8 +98,9 @@ def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
     env = gym.make(env_name, **env_dict)
 
     # See if we've pre-screened for this input combination.
+    # TODO: Update for contingencies. Need an input or some other way of discriminating.
     file_str = get_file_str(case_str=case_str, seed=seed,
-                            v_truncate=v_truncate)
+                            contingencies=True)
 
     json_file = 'env_input' + file_str + '.json'
     mask_file = 'mask' + file_str + '.pkl'
