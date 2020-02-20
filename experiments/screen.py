@@ -7,7 +7,7 @@ from constants import ENV_DICT, MIN_LOAD_FACTOR_DEFAULT,\
     get_file_str, SHUNT_CLOSED_PROBABILITY_DEFAULT, \
     NUM_GEN_VOLTAGE_BINS_DEFAULT, GEN_VOLTAGE_RANGE_DEFAULT, \
     LOW_V_DEFAULT, HIGH_V_DEFAULT, TRUNCATE_VOLTAGES_DEFAULT, \
-    MIN_LOAD_PF_DEFAULT
+    MIN_LOAD_PF_DEFAULT, IL_200_PWB
 import gym
 # Must import gym_powerworld for the environments to get registered.
 # noinspection PyUnresolvedReferences
@@ -20,6 +20,7 @@ import os
 import logging
 import threading
 import json
+import argparse
 
 logging.basicConfig(level=logging.INFO)
 LOG = logging.getLogger(__name__)
@@ -113,7 +114,7 @@ def log_progress(q: mp.Queue):
         LOG.info(m)
 
 
-def main():
+def main(env_id, case_path, case_str):
     # Create logging queue.
     lq = mp.Queue()
 
@@ -126,20 +127,17 @@ def main():
 
     # Loop and start processes.
     for seed in range(NUM_RUNS_DEFAULT):
-        for v_truncate in [True, False]:
-            for case_path, case_str in zip([IEEE_14_PWB], ['14']):
-                for env_id in ['powerworld-discrete-env-simple-14-bus-v0']:
-                    kwargs = {
-                        'seed': seed,
-                        'v_truncate': v_truncate,
-                        'case_path': case_path,
-                        'env_id': env_id,
-                        'case_str': case_str,
-                        'log_queue': lq
-                    }
-                    p = mp.Process(target=run, kwargs=kwargs)
-                    processes.append(p)
-                    p.start()
+        kwargs = {
+            'seed': seed,
+            'v_truncate': True,
+            'case_path': case_path,
+            'env_id': env_id,
+            'case_str': case_str,
+            'log_queue': lq
+        }
+        p = mp.Process(target=run, kwargs=kwargs)
+        processes.append(p)
+        p.start()
 
     # Wait.
     for p in processes:
@@ -149,13 +147,38 @@ def main():
     lq.put(None)
 
 
-def test():
-    with open('mask_14_0_0.pkl', 'rb') as f:
-        arr = pickle.load(f)
-
-    print(arr.shape)
+# def test():
+#     with open('mask_14_0_0.pkl', 'rb') as f:
+#         arr = pickle.load(f)
+#
+#     print(arr.shape)
 
 
 if __name__ == '__main__':
-    main()
-    # test()
+    # Set up arguments.
+    parser = argparse.ArgumentParser()
+    parser.add_argument('env', help='Gym Powerworld environment to use.', type=str,
+                        choices=['powerworld-discrete-env-simple-14-bus-v0',
+                                 'powerworld-discrete-env-gen-shunt-no-contingencies-v0',
+                                 'powerworld-discrete-env-gen-branch-shunt-v0'
+                                 ])
+    parser.add_argument('case', help='Power system case to use.', type=str,
+                        choices=['14', '200'])
+    parser.add_argument('--num_scenarios', type=int, default=int(NUM_SCENARIOS_DEFAULT),
+                        help='Number of scenarios for environment to create.')
+
+    # Parse arguments.
+    args_in = parser.parse_args()
+
+    # Select case path.
+    if args_in.case == '14':
+        pwb_path = IEEE_14_PWB
+    elif args_in.case == '200':
+        pwb_path = IL_200_PWB
+    else:
+        raise ValueError()
+
+    ENV_DICT['num_scenarios'] = args_in.num_scenarios
+
+    # Run.
+    main(env_id=args_in.env, case_path=pwb_path, case_str=args_in.case)
