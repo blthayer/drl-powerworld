@@ -7,7 +7,7 @@ from constants import ENV_DICT, MIN_LOAD_FACTOR_DEFAULT,\
     get_file_str, SHUNT_CLOSED_PROBABILITY_DEFAULT, \
     NUM_GEN_VOLTAGE_BINS_DEFAULT, GEN_VOLTAGE_RANGE_DEFAULT, \
     LOW_V_DEFAULT, HIGH_V_DEFAULT, TRUNCATE_VOLTAGES_DEFAULT, \
-    MIN_LOAD_PF_DEFAULT, IL_200_PWB
+    MIN_LOAD_PF_DEFAULT, IL_200_PWB, SC_500_PWB
 import gym
 # Must import gym_powerworld for the environments to get registered.
 # noinspection PyUnresolvedReferences
@@ -97,14 +97,20 @@ def run(seed, contingencies, case_path, env_id, case_str, log_queue):
     with open('env_input' + file_str + '.json', 'w') as f:
         json.dump(ed, f)
 
+    # Log percent success.
+    pct = \
+        env.scenario_init_success.sum()/env.scenario_init_success.shape[0]*100
+    log_queue.put(
+        f'{pct:.1f}% of episodes were successful.')
+
+    # Close the environment.
+    env.close()
+
     # Remove the log.
     try:
         os.remove(log)
     except FileNotFoundError:
         pass
-
-    # Close the environment.
-    env.close()
 
 
 def log_progress(q: mp.Queue):
@@ -158,14 +164,16 @@ def main(env_id, case_path, case_str, contingencies):
 if __name__ == '__main__':
     # Set up arguments.
     parser = argparse.ArgumentParser()
-    parser.add_argument('env', help='Gym Powerworld environment to use.', type=str,
-                        choices=['powerworld-discrete-env-simple-14-bus-v0',
-                                 'powerworld-discrete-env-gen-shunt-no-contingencies-v0',
-                                 'powerworld-discrete-env-gen-branch-shunt-v0'
-                                 ])
+    parser.add_argument(
+        'env', help='Gym Powerworld environment to use.', type=str,
+        choices=['powerworld-discrete-env-simple-14-bus-v0',
+                 'powerworld-discrete-env-gen-shunt-no-contingencies-v0',
+                 'powerworld-discrete-env-gen-branch-shunt-v0'
+                 ])
     parser.add_argument('case', help='Power system case to use.', type=str,
-                        choices=['14', '200'])
-    parser.add_argument('--num_scenarios', type=int, default=int(NUM_SCENARIOS_DEFAULT),
+                        choices=['14', '200', '500'])
+    parser.add_argument('--num_scenarios', type=int,
+                        default=int(NUM_SCENARIOS_DEFAULT),
                         help='Number of scenarios for environment to create.')
 
     # Parse arguments.
@@ -176,6 +184,8 @@ if __name__ == '__main__':
         pwb_path = IEEE_14_PWB
     elif args_in.case == '200':
         pwb_path = IL_200_PWB
+    elif args_in.case == '500':
+        pwb_path = SC_500_PWB
     else:
         raise ValueError()
 
