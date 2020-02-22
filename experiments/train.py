@@ -23,7 +23,8 @@ from constants import THIS_DIR, IEEE_14_PWB, IEEE_14_PWB_CONDENSERS, \
     MIN_LOAD_FACTOR_DEFAULT, MAX_LOAD_FACTOR_DEFAULT, \
     LOAD_ON_PROBABILITY_DEFAULT, LEAD_PF_PROBABILITY_DEFAULT, \
     NUM_TIME_STEPS_DEFAULT, NUM_SCENARIOS_DEFAULT, NUM_RUNS_DEFAULT, \
-    get_file_str, MIN_LOAD_PF_DEFAULT, DATA_DIR, TEST_EPISODES
+    get_file_str, MIN_LOAD_PF_DEFAULT, DATA_DIR, TEST_EPISODES, IL_200_PWB, \
+    SC_500_PWB
 
 
 def callback_factory(average_reward, max_episodes):
@@ -338,7 +339,8 @@ if __name__ == '__main__':
         ])
     
     parser.add_argument(
-        'case', help='Case to use.', type=str, choices=['14', '14_condensers'])
+        'case', help='Case to use.', type=str,
+        choices=['14', '14_condensers', '200', '500'])
     parser.add_argument('--num_runs', help='Number of times to train.',
                         type=int, default=NUM_RUNS_DEFAULT)
     # https://stackoverflow.com/a/24866869/11052174
@@ -391,6 +393,12 @@ if __name__ == '__main__':
         case_str_ = args_in.case
     elif args_in.case == '14_condensers':
         case_ = IEEE_14_PWB_CONDENSERS
+        case_str_ = args_in.case
+    elif args_in.case == '200':
+        case_ = IL_200_PWB
+        case_str_ = args_in.case
+    elif args_in.case == '500':
+        case_ = SC_500_PWB
         case_str_ = args_in.case
     else:
         raise UserWarning('What is going on?')
