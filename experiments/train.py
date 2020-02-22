@@ -68,7 +68,6 @@ def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
     they used.
     """
 
-    # TODO: Put images on the SSD so it runs faster.
     # Files and such.
     image_dir = os.path.join(out_dir, 'images')
     train_logfile = os.path.join(out_dir, 'log_train.csv')
@@ -98,9 +97,8 @@ def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
     env = gym.make(env_name, **env_dict)
 
     # See if we've pre-screened for this input combination.
-    # TODO: Update for contingencies. Need an input or some other way of discriminating.
     file_str = get_file_str(case_str=case_str, seed=seed,
-                            contingencies=True)
+                            contingencies=env.CONTINGENCIES)
 
     json_file = 'env_input' + file_str + '.json'
     mask_file = 'mask' + file_str + '.pkl'
@@ -328,7 +326,9 @@ if __name__ == '__main__':
             'powerworld-discrete-env-simple-14-bus-v0',
             'powerworld-discrete-env-gen-state-14-bus-v0',
             'powerworld-discrete-env-branch-state-14-bus-v0',
-            'powerworld-discrete-env-branch-and-gen-state-14-bus-v0'
+            'powerworld-discrete-env-branch-and-gen-state-14-bus-v0',
+            'powerworld-discrete-env-gen-shunt-no-contingencies-v0',
+            'powerworld-discrete-env-gen-branch-shunt-v0'
         ])
     
     parser.add_argument(

@@ -40,11 +40,9 @@ ENV_DICT_FILLED['log_level'] = logging.ERROR
 LOG.setLevel(logging.INFO)
 
 
-def run(seed, contingencies, case_path, env_id, case_str, log_queue):
+def run(seed, case_path, env_id, case_str, log_queue):
     """
     :param seed: Seed for random numbers.
-    :param contingencies: Boolean flag indicating if this environment is applying
-        contingencies or not.
     :param case_path: Full path to the PowerWorld case.
     :param env_id: String corresponding to the ID of the environment to
         use. Passed directly to gym.make.
@@ -62,16 +60,18 @@ def run(seed, contingencies, case_path, env_id, case_str, log_queue):
     # Always truncate voltages.
     ed['truncate_voltages'] = True
 
-    # Use the following to encode files of various sorts.
-    file_str = get_file_str(case_str=case_str, seed=seed,
-                            contingencies=contingencies)
-
-    # Train logfile will be a combination of the seed and v_truncate.
-    log = 'log' + file_str + '.csv'
-    ed['csv_logfile'] = log
+    ed['csv_logfile'] = 'tmp.csv'
 
     # Make the environment.
     env = gym.make(env_id, **ed)
+
+    # Use the following to encode files of various sorts.
+    file_str = get_file_str(case_str=case_str, seed=seed,
+                            contingencies=env.CONTINGENCIES)
+
+    # Train logfile will be a combination of the seed and v_truncate.
+    log = 'log' + file_str + '.csv'
+    env.csv_logfile = log
 
     # Loop and run reset to set scenario and solve the power flow.
     log_thresh = ed['num_scenarios'] / 100
@@ -121,7 +121,7 @@ def log_progress(q: mp.Queue):
         LOG.info(m)
 
 
-def main(env_id, case_path, case_str, contingencies):
+def main(env_id, case_path, case_str):
     # Create logging queue.
     lq = mp.Queue()
 
@@ -140,7 +140,6 @@ def main(env_id, case_path, case_str, contingencies):
             'env_id': env_id,
             'case_str': case_str,
             'log_queue': lq,
-            'contingencies': contingencies
         }
         p = mp.Process(target=run, kwargs=kwargs)
         processes.append(p)
@@ -197,5 +196,4 @@ if __name__ == '__main__':
     ENV_DICT['num_scenarios'] = args_in.num_scenarios
 
     # Run.
-    main(env_id=args_in.env, case_path=pwb_path, case_str=args_in.case,
-         contingencies=contingencies_)
+    main(env_id=args_in.env, case_path=pwb_path, case_str=args_in.case)
