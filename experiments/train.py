@@ -257,7 +257,8 @@ def test_loop_mod(env, model):
 def loop(out_dir, env_name, runs, hidden_list, num_scenarios,
          avg_reward, num_time_steps, case, min_load_factor,
          max_load_factor, lead_pf_probability, load_on_probability,
-         mod_learn, v_truncate, case_str, scale_v_obs, clipped_r, gamma):
+         mod_learn, v_truncate, case_str, scale_v_obs, clipped_r, gamma,
+         seed):
     """Run the gridmind_reproduce function in a loop."""
     base_dir = os.path.join(DATA_DIR, out_dir)
 
@@ -285,9 +286,14 @@ def loop(out_dir, env_name, runs, hidden_list, num_scenarios,
     if mod_learn:
         CustomPolicy.step = step_mod
 
+    if seed is None:
+        iterable = range(runs)
+    else:
+        iterable = [seed]
+
     # Loop over the runs.
-    for i in range(runs):
-        seed = i
+    for i in iterable:
+        seed_ = i
         # Create name of directory for this run.
         tmp_dir = os.path.join(base_dir, f'run_{i}')
 
@@ -301,7 +307,7 @@ def loop(out_dir, env_name, runs, hidden_list, num_scenarios,
 
         # Do the learning and testing.
         learn_and_test(
-            out_dir=tmp_dir, seed=seed, env_name=env_name,
+            out_dir=tmp_dir, seed=seed_, env_name=env_name,
             num_scenarios=num_scenarios, num_time_steps=num_time_steps,
             callback=callback, policy=CustomPolicy, case=case,
             min_load_factor=min_load_factor,
@@ -371,6 +377,11 @@ if __name__ == '__main__':
     parser.add_argument('--scale_v_obs', action='store_true')
     parser.add_argument('--clipped_r', action='store_true')
     parser.add_argument('--gamma', type=float, default=0.99)
+    parser.add_argument(
+        '--seed', type=int, default=None,
+        help=('Only pass a seed if you want to perform a single run with the '
+              'given seed. Otherwise, let num_runs handle the seeding in the '
+              'loop.'))
 
     # Parse the arguments.
     args_in = parser.parse_args()
@@ -394,4 +405,5 @@ if __name__ == '__main__':
          lead_pf_probability=args_in.lead_pf_probability,
          mod_learn=args_in.mod_learn, v_truncate=args_in.v_truncate,
          case_str=case_str_, scale_v_obs=args_in.scale_v_obs,
-         clipped_r=args_in.clipped_r, gamma=args_in.gamma)
+         clipped_r=args_in.clipped_r, gamma=args_in.gamma,
+         seed=args_in.seed)
