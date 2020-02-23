@@ -4,6 +4,7 @@ import gym
 # Must import gym_powerworld for the environments to get registered.
 # noinspection PyUnresolvedReferences
 import gym_powerworld
+from gym_powerworld.envs.voltage_control_env import OutOfScenariosError
 import numpy as np
 import time
 import shutil
@@ -55,6 +56,18 @@ def callback_factory(average_reward, max_episodes):
             return True
 
     return callback
+
+
+def num_episodes_callback(lcl, _glb) -> bool:
+    """Callback to stop training if we've hit the number of episodes.
+    """
+    num_ep = len(lcl['episode_rewards'])
+    max_episodes = lcl['self'].env.num_scenarios
+
+    if num_ep >= max_episodes:
+        # Terminate.
+        print(f'Terminating training since we have hit {num_ep} episodes.')
+        return False
 
 
 def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
@@ -188,7 +201,12 @@ def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
     t0 = time.time()
     learn_dict = {'total_timesteps': num_time_steps, 'callback': callback,
                   'log_interval': 100}
-    model.learn(**learn_dict)
+    try:
+        model.learn(**learn_dict)
+    except OutOfScenariosError:
+        # Do nothing for now. We'll check the scenario_idx shortly.
+        pass
+
     t1 = time.time()
 
     print('All done, saving to file.')
@@ -199,6 +217,12 @@ def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
     print(s)
     with open(info_file, 'w') as f:
         f.write(s)
+
+    if env.scenario_idx >= env.num_scenarios:
+        print('*' * 80)
+        print('Not testing since we ran out of scenarios. Exiting...')
+        env.close()
+        print('*' * 80)
 
     # Run through several "test" scenarios without training. Uncomment
     # the "render" lines to save images and display them.
@@ -270,8 +294,11 @@ def loop(out_dir, env_name, runs, hidden_list, num_scenarios,
         pass
 
     # Create the callback.
-    callback = callback_factory(average_reward=avg_reward,
-                                max_episodes=num_scenarios)
+    if avg_reward is not None:
+        callback = callback_factory(average_reward=avg_reward,
+                                    max_episodes=num_scenarios)
+    else:
+        callback = num_episodes_callback
 
     # Create a custom policy using the specified layers.
     class CustomPolicy(FeedForwardPolicy):
@@ -353,7 +380,7 @@ if __name__ == '__main__':
         help='Number of scenarios for the environment to create.',
     )
     parser.add_argument(
-        '--avg_reward', type=float, default=198.75,
+        '--avg_reward', type=float, default=None,
         help='Stop training when the 100 episode average has hit this reward.'
     )
     parser.add_argument(
