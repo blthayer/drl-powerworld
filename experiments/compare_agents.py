@@ -100,11 +100,15 @@ def main(case_str, random, mod, env_name, clipped_r):
             gen_buses.sort()
 
             # For the graph technique, we'll be setting gens to the
-            # highest allowable voltage. Take advantage of this fact,
-            # and compute the lowest action number. The + 1 is due to
+            # highest and second highest allowable voltage. Take
+            # advantage of this fact, and compute the starting action
+            # numbers for these voltage set points. The + 1 is due to
             # the no-op action.
-            starting_action_num = \
+            starting_action_num_105 = \
                 env.num_gens * (env.gen_bins.shape[0] - 1) + 1
+
+            starting_action_num_1025 = \
+                env.num_gens * (env.gen_bins.shape[0] - 2) + 1
 
         # Loop and take random actions.
         action_list = []
@@ -118,7 +122,7 @@ def main(case_str, random, mod, env_name, clipped_r):
                 gens_on = np.array(gen_buses)[env.gen_status_arr.astype(bool)]
 
                 # Get a graph for this episode.
-                graph = get_network_graph(env)
+                graph = get_network_graph(env, clipped_r)
 
             # Clear the action list.
             action_list.clear()
@@ -139,7 +143,10 @@ def main(case_str, random, mod, env_name, clipped_r):
                     # noinspection PyUnboundLocalVariable
                     action = get_graph_action(
                         env=env, graph=graph, obs=obs, gens_on=gens_on,
-                        starting_action_num=starting_action_num)
+                        starting_action_num_105=starting_action_num_105,
+                        starting_action_num_1025=starting_action_num_1025,
+                        action_list=action_list
+                    )
 
                 # Put the action in the action list.
                 action_list.append(action)
@@ -155,62 +162,87 @@ def get_random_action(env):
     return env.action_space.sample()
 
 
-def get_graph_action(env, graph, obs, gens_on, starting_action_num):
+def get_graph_action(env, graph, obs, gens_on, starting_action_num_105,
+                     starting_action_num_1025, action_list):
     # TODO: Update to work with cases other than the 14 node.
+    # Before proceeding any further, check to see if all voltages are
+    # already in bounds. If this is the case, take the no-op action.
+    if env.all_v_in_range:
+        return 0
 
-    # Get lowest magnitude voltage bus, recalling that
-    # the bus voltages always go first in the
-    # observation. Bump by 1 due to 0-based indexing.
+    # Get lowest and highest magnitude voltage buses, recalling that
+    # the bus voltages always go first in the observation. Bump by 1 due
+    # to 0-based indexing.
     low_bus = int(np.argmin(obs[0:env.num_buses]) + 1)
     low_v = obs[0:env.num_buses][low_bus - 1]
+    high_bus = int(np.argmax(obs[0:env.num_buses]) + 1)
+    high_v = obs[0:env.num_buses][high_bus - 1]
 
-    # If the lowest voltage is above the threshold,
-    # take the no-op action.
-    if low_v > (0.95 + V_TOL):
-        action = 0
+    # Set flag for whether or not we're going to work on the lowest
+    # voltage or the highest voltage.
+    low_flag = low_v < (0.95 + V_TOL)
+
+    # Determine which bus to get electrical distances from, and which
+    # action number to use in computing the action to take.
+    if low_flag:
+        bus = low_bus
+        starting_action_num = starting_action_num_105
+        v = 1.05
+    elif high_v > (1.05 + V_TOL):
+        bus = high_bus
+        starting_action_num = starting_action_num_1025
+        v = 1.025
     else:
-        # Get electrical distances from the lowest bus
-        # to each generator (reactance only).
-        distances = \
-            np.array(
-                [nx.dijkstra_path_length(
-                    graph, low_bus, gen_bus, 'x')
-                    for gen_bus in gens_on])
+        # We should never get here.
+        return 0
 
-        # Loop to determine a valid action. Initialize
-        # to the no-op action.
-        action = 0
-        for idx in np.argsort(distances):
-            # Get the bus number corresponding to this
-            # generator.
-            gen_bus = gens_on[idx]
+    # Get electrical distances from the bus to each generator (reactance
+    # only).
+    distances = \
+        np.array([nx.dijkstra_path_length(graph, bus, gen_bus, 'x')
+                  for gen_bus in gens_on])
 
-            # noinspection PyUnresolvedReferences
-            gen_mask = \
-                (env.gen_obs_data['BusNum'] == gen_bus).to_numpy()
+    # Loop to determine a valid action. Initialize
+    # to the no-op action.
+    action = 0
+    for idx in np.argsort(distances):
+        # Get the bus number corresponding to this
+        # generator.
+        gen_bus = gens_on[idx]
 
-            # Look up the voltage set point.
-            # TODO: The next few lines will likely cause
-            #   issues with cases other than the 14 bus.
-            v_set = \
-                env.gen_obs_data['GenVoltSet'].to_numpy()[
-                    gen_mask]
-            assert v_set.shape[0] == 1
-            v_set = v_set[0]
+        # noinspection PyUnresolvedReferences
+        gen_mask = \
+            (env.gen_obs_data['BusNum'] == gen_bus).to_numpy()
 
-            # If the set point is already at the max,
-            # move on to the next generator.
-            if np.isclose(v_set, 1.05, rtol=0.0, atol=V_TOL):
-                continue
+        # Look up the voltage set point.
+        # TODO: The next few lines will likely cause
+        #   issues with cases other than the 14 bus.
+        v_set = \
+            env.gen_obs_data['GenVoltSet'].to_numpy()[
+                gen_mask]
+        assert v_set.shape[0] == 1
+        v_set = v_set[0]
 
-            # Determine what action we need and stop looping.
-            action = starting_action_num + np.argmax(gen_mask)
+        # If the set point is already at the appropriate setting, or
+        # move on to the next generator.
+        if np.isclose(v_set, v, rtol=0.0, atol=V_TOL):
+            continue
+
+        # Determine what action we need.
+        action = starting_action_num + np.argmax(gen_mask)
+
+        # If this action has already been taken this episode, keep on
+        # looping.
+        if action in action_list:
+            continue
+        else:
+            # We have an action to take. Break the loop.
             break
 
     return action
 
 
-def get_network_graph(env):
+def get_network_graph(env, flag):
     """Get a graph representing the PowerWorld case. The resulting graph
     will have edges with an 'x' attribute for reactance (float), and
     nodes will have a 'gen' attribute (True or False)
@@ -219,7 +251,7 @@ def get_network_graph(env):
     g = nx.Graph()
 
     # Save YBus.
-    f = os.path.join(THIS_DIR, 'ybus.mat')
+    f = os.path.join(THIS_DIR, f'ybus_{int(flag)}.mat')
     env.saw.RunScriptCommand(f'SaveYbusInMatlabFormat("{f}", NO)')
     # Load YBus.
     with open(f, 'r') as f1:
@@ -287,12 +319,12 @@ if __name__ == '__main__':
     # main(case_str='14', random=True, mod=True,
     #      env_name='powerworld-discrete-env-simple-14-bus-v0',
     #      clipped_r=False)
-    main(case_str='14', random=True, mod=False,
-         env_name='powerworld-discrete-env-simple-14-bus-v0',
-         clipped_r=True)
-    main(case_str='14', random=True, mod=True,
-         env_name='powerworld-discrete-env-simple-14-bus-v0',
-         clipped_r=True)
+    # main(case_str='14', random=True, mod=False,
+    #      env_name='powerworld-discrete-env-simple-14-bus-v0',
+    #      clipped_r=True)
+    # main(case_str='14', random=True, mod=True,
+    #      env_name='powerworld-discrete-env-simple-14-bus-v0',
+    #      clipped_r=True)
     # Graph:
     # main(case_str='14', random=False, mod=False,
     #      env_name='powerworld-discrete-env-simple-14-bus-v0',
