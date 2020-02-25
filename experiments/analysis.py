@@ -119,6 +119,7 @@ def plot_testing(df, exp_dir):
     reward_s = rewards['reward']
     action_s = actions['action_taken']
     _test_reward_hist(s_in=reward_s, save_dir=exp_dir)
+    _test_action_hist(s_in=action_s, save_dir=exp_dir)
     # _plot_helper_test(s_in=reward_s, save_dir=exp_dir, term='Reward')
     _plot_helper_test(s_in=action_s, save_dir=exp_dir,
                       term='Action Count')
@@ -176,6 +177,30 @@ def _test_reward_hist(s_in, save_dir):
     fig.savefig(os.path.join(save_dir, 'test_reward_hist.eps'), format='eps')
     plt.close(fig)
     pass
+
+
+# noinspection DuplicatedCode
+def _test_action_hist(s_in, save_dir):
+    # Initialize figure.
+    fig, ax = plt.subplots()
+    # Create histogram.
+    counts, bins, patches = ax.hist(s_in.to_numpy())
+    # Normalize. https://stackoverflow.com/a/22241514/11052174
+    for item in patches:
+        item.set_height(item.get_height() / s_in.shape[0] * 100)
+    ax.set_ybound(0.0, 100.0)
+    ax.set_xlabel('Episode Action Count Bins')
+    ax.set_ylabel(f'Percentage of Episodes Falling in the Action Count Bin')
+    ax.set_title('Normalized Histogram of Testing Episode Action Counts')
+    add_value_labels(ax)
+    ax.grid(True, which='major', axis='y')
+    ax.set_xticks(bins)
+    ax.xaxis.set_tick_params(rotation=45)
+    plt.tight_layout()
+    ax.set_axisbelow(True)
+    fig.savefig(os.path.join(save_dir, 'test_action_hist.png'), format='png')
+    fig.savefig(os.path.join(save_dir, 'test_action_hist.eps'), format='eps')
+    plt.close(fig)
 
 
 def add_value_labels(ax, spacing=5):
