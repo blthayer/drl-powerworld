@@ -1,8 +1,5 @@
 """Perform the same tests, but with a random agent and a graph-based.
 agent.
-
-TODO/NOTE: At present, the graph-based approach will only work for the
-    14 bus case.
 """
 # noinspection PyUnresolvedReferences,PyPackageRequirements
 from constants import THIS_DIR, IEEE_14_PWB, IEEE_14_PWB_CONDENSERS, \
@@ -10,7 +7,8 @@ from constants import THIS_DIR, IEEE_14_PWB, IEEE_14_PWB_CONDENSERS, \
     MIN_LOAD_FACTOR_DEFAULT, MAX_LOAD_FACTOR_DEFAULT, \
     LOAD_ON_PROBABILITY_DEFAULT, LEAD_PF_PROBABILITY_DEFAULT, \
     NUM_TIME_STEPS_DEFAULT, NUM_SCENARIOS_DEFAULT, NUM_RUNS_DEFAULT, \
-    get_file_str, MIN_LOAD_PF_DEFAULT, DATA_DIR, TEST_EPISODES
+    get_file_str, MIN_LOAD_PF_DEFAULT, DATA_DIR, TEST_EPISODES, \
+    IL_200_PWB, SC_500_PWB
 import json
 import numpy as np
 import gym
@@ -18,24 +16,33 @@ import gym
 import gym_powerworld
 import os
 import pickle
-import shutil
+# import shutil
 import networkx as nx
 import re
+import argparse
 
 from gym_powerworld.envs.voltage_control_env import V_TOL
 
 
-def main(case_str, random, mod, env_name, clipped_r):
+def main(case_str, random, mod, env_name, clipped_r, seed):
     # Primary output directory.
     if random:
         s = 'random'
     else:
         s = 'graph'
 
-    if not clipped_r:
-        d = os.path.join(DATA_DIR, f'{s}_agent_{case_str}')
+    if 'no-contingencies' in env_name:
+        contingencies = False
+        con_str = 'no_con'
     else:
-        d = os.path.join(DATA_DIR, f'{s}_agent_clipped_reward_{case_str}')
+        contingencies = True
+        con_str = 'with_con'
+
+    if not clipped_r:
+        d = os.path.join(DATA_DIR, f'{s}_agent_{case_str}_{con_str}')
+    else:
+        d = os.path.join(DATA_DIR,
+                         f'{s}_agent_clipped_reward_{case_str}_{con_str}')
 
     if mod:
         d = d + '_mod'
@@ -44,24 +51,35 @@ def main(case_str, random, mod, env_name, clipped_r):
     # different user names...
     if case_str == '14':
         case_path = IEEE_14_PWB
+    elif case_str == '200':
+        case_path = IL_200_PWB
+    elif case_str == '500':
+        case_path = SC_500_PWB
     else:
         raise NotImplementedError()
 
     try:
         os.mkdir(d)
     except FileExistsError:
-        shutil.rmtree(d)
-        os.mkdir(d)
+        pass
+        # shutil.rmtree(d)
+        # os.mkdir(d)
+
+    if seed is not None:
+        iterable = [seed]
+    else:
+        iterable = range(NUM_RUNS_DEFAULT)
 
     # Loop.
-    for seed in range(NUM_RUNS_DEFAULT):
+    for seed in iterable:
         # Create directory.
         run_dir = os.path.join(d, f'run_{seed}')
         os.mkdir(run_dir)
 
         # Get a file string so we can load up the environment dict.
-        # TODO: Add logic for contingencies based on name, like done in screen.py
-        fs = get_file_str(case_str=case_str, seed=seed, contingencies=True)
+
+        fs = get_file_str(case_str=case_str, seed=seed,
+                          contingencies=contingencies)
         with open(f'env_input{fs}.json', 'r') as f:
             env_dict = json.load(f)
 
@@ -95,9 +113,10 @@ def main(case_str, random, mod, env_name, clipped_r):
         if random:
             env.action_space.seed(seed=seed)
         else:
-            # Extract nodes with generators. Ensure list is sorted.
-            gen_buses = env.gen_init_data['BusNum'].tolist()
-            gen_buses.sort()
+            # Extract nodes with generators. This should come back
+            # sorted since the gen_init_data comes back from ESA sorted
+            # by BusNum.
+            gen_buses = env.gen_buses.to_numpy()
 
             # For the graph technique, we'll be setting gens to the
             # highest and second highest allowable voltage. Take
@@ -105,10 +124,10 @@ def main(case_str, random, mod, env_name, clipped_r):
             # numbers for these voltage set points. The + 1 is due to
             # the no-op action.
             starting_action_num_105 = \
-                env.num_gens * (env.gen_bins.shape[0] - 1) + 1
+                env.num_gen_reg_buses * (env.gen_bins.shape[0] - 1) + 1
 
             starting_action_num_1025 = \
-                env.num_gens * (env.gen_bins.shape[0] - 2) + 1
+                env.num_gen_reg_buses * (env.gen_bins.shape[0] - 2) + 1
 
         # Loop and take random actions.
         action_list = []
@@ -117,9 +136,9 @@ def main(case_str, random, mod, env_name, clipped_r):
             done = False
 
             if not random:
-                # Get generators which are on.
+                # Get buses which have a generator that is on.
                 # noinspection PyUnboundLocalVariable
-                gens_on = np.array(gen_buses)[env.gen_status_arr.astype(bool)]
+                gens_on = gen_buses[env.gen_bus_status_arr]
 
                 # Get a graph for this episode.
                 graph = get_network_graph(env, clipped_r)
@@ -164,7 +183,6 @@ def get_random_action(env):
 
 def get_graph_action(env, graph, obs, gens_on, starting_action_num_105,
                      starting_action_num_1025, action_list):
-    # TODO: Update to work with cases other than the 14 node.
     # Before proceeding any further, check to see if all voltages are
     # already in bounds. If this is the case, take the no-op action.
     if env.all_v_in_range:
@@ -215,12 +233,13 @@ def get_graph_action(env, graph, obs, gens_on, starting_action_num_105,
             (env.gen_obs_data['BusNum'] == gen_bus).to_numpy()
 
         # Look up the voltage set point.
-        # TODO: The next few lines will likely cause
-        #   issues with cases other than the 14 bus.
         v_set = \
             env.gen_obs_data['GenVoltSet'].to_numpy()[
                 gen_mask]
-        assert v_set.shape[0] == 1
+        # There can be multiple generators at a bus. The environments
+        # should command them all to the same set point. Sanity check
+        # that here.
+        assert np.allclose(v_set[0], v_set)
         v_set = v_set[0]
 
         # If the set point is already at the appropriate setting, or
@@ -312,6 +331,37 @@ def get_network_graph(env, flag):
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('case', type=str, choices=['14', '200', '500'],
+                        help='Case to use.')
+    parser.add_argument(
+        'env', type=str,
+        choices=['powerworld-discrete-env-simple-14-bus-v0',
+                 'powerworld-discrete-env-gen-shunt-no-contingencies-v0'
+                 'powerworld-discrete-env-gen-branch-shunt-v0',
+                 ],
+        help='Environment to use')
+    parser.add_argument(
+        'random', type=bool,
+        help='Whether to use the random agent (True) or the graph agent '
+             '(False)')
+    parser.add_argument(
+        '--mod', type=bool, default=True,
+        help='Whether or not to force random agent to not take the same action'
+             ' multiple times in an episode.'
+    )
+    parser.add_argument(
+        '--clipped', type=bool, default=False,
+        help='Whether to use the clipped rewards or not.'
+    )
+    parser.add_argument(
+        '--seed', type=int, default=None,
+        help='If a seed is provided, a single run with the given seed is '
+             'performed. If a seed is not provided, all seeds in range('
+             f'{NUM_RUNS_DEFAULT}) will be run in series.')
+    args_in = parser.parse_args()
+    main(case_str=args_in.case, env_name=args_in.env, random=args_in.random,
+         mod=args_in.mod, clipped_r=args_in.clipped_r, seed=args_in.seed)
     # Random:
     # main(case_str='14', random=True, mod=False,
     #      env_name='powerworld-discrete-env-simple-14-bus-v0',
@@ -329,6 +379,6 @@ if __name__ == '__main__':
     # main(case_str='14', random=False, mod=False,
     #      env_name='powerworld-discrete-env-simple-14-bus-v0',
     #      clipped_r=False)
-    main(case_str='14', random=False, mod=False,
-         env_name='powerworld-discrete-env-simple-14-bus-v0',
-         clipped_r=True)
+    # main(case_str='14', random=False, mod=False,
+    #      env_name='powerworld-discrete-env-simple-14-bus-v0',
+    #      clipped_r=True)
