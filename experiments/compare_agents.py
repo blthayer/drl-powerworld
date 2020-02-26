@@ -141,7 +141,7 @@ def main(case_str, random, mod, env_name, clipped_r, seed):
                 gens_on = gen_buses[env.gen_bus_status_arr]
 
                 # Get a graph for this episode.
-                graph = get_network_graph(env, clipped_r)
+                graph = get_network_graph(env, fs, random)
 
             # Clear the action list.
             action_list.clear()
@@ -261,7 +261,7 @@ def get_graph_action(env, graph, obs, gens_on, starting_action_num_105,
     return action
 
 
-def get_network_graph(env, flag):
+def get_network_graph(env, file_str, random):
     """Get a graph representing the PowerWorld case. The resulting graph
     will have edges with an 'x' attribute for reactance (float), and
     nodes will have a 'gen' attribute (True or False)
@@ -270,7 +270,7 @@ def get_network_graph(env, flag):
     g = nx.Graph()
 
     # Save YBus.
-    f = os.path.join(THIS_DIR, f'ybus_{int(flag)}.mat')
+    f = os.path.join(THIS_DIR, f'ybus_{file_str}_{int(random)}.mat')
     env.saw.RunScriptCommand(f'SaveYbusInMatlabFormat("{f}", NO)')
     # Load YBus.
     with open(f, 'r') as f1:
