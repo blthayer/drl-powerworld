@@ -337,7 +337,7 @@ if __name__ == '__main__':
     parser.add_argument(
         'env', type=str,
         choices=['powerworld-discrete-env-simple-14-bus-v0',
-                 'powerworld-discrete-env-gen-shunt-no-contingencies-v0'
+                 'powerworld-discrete-env-gen-shunt-no-contingencies-v0',
                  'powerworld-discrete-env-gen-branch-shunt-v0',
                  ],
         help='Environment to use')
