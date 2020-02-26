@@ -342,17 +342,17 @@ if __name__ == '__main__':
                  ],
         help='Environment to use')
     parser.add_argument(
-        'random', type=bool,
-        help='Whether to use the random agent (True) or the graph agent '
-             '(False)')
+        '--random', action='store_true',
+        help='Include this flag to use the random agent. Otherwise, the graph '
+             'agent will be used.')
     parser.add_argument(
-        '--mod', type=bool, default=True,
-        help='Whether or not to force random agent to not take the same action'
-             ' multiple times in an episode.'
+        '--mod', action='store_true',
+        help='Include this flag to force the random agent to not take the same'
+             ' action multiple times in an episode.'
     )
     parser.add_argument(
-        '--clipped', type=bool, default=False,
-        help='Whether to use the clipped rewards or not.'
+        '--clipped', action='store_true',
+        help='Include this flag to use the clipped rewards.'
     )
     parser.add_argument(
         '--seed', type=int, default=None,
