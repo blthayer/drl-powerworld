@@ -1,5 +1,5 @@
-# noinspection PyUnresolvedReferences
-from constants import THIS_DIR, DATA_DIR, TEST_EPISODES
+# noinspection PyUnresolvedReferences,PyPackageRequirements
+from constants import THIS_DIR, DATA_DIR, TEST_EPISODES, add_value_labels
 from gym_powerworld.envs.voltage_control_env import V_TOL
 import pandas as pd
 import os
@@ -41,8 +41,8 @@ def loop(in_dir):
         time_arr[i] = train_time
         oob_arr[i] = pct_oob
 
-    df = pd.DataFrame({'Success Percentage': pct_success_arr,
-                       'Success Percentage Start OOB': oob_success_arr,
+    df = pd.DataFrame({'Success %': pct_success_arr,
+                       'Success % O.O.B.': oob_success_arr,
                        'Mean Reward': mean_reward_arr,
                        'Percentage of Episodes Start OOB': oob_arr,
                        'Num Test Actions': num_test_actions_arr,
@@ -130,6 +130,7 @@ def plot_testing(df, exp_dir):
     return rewards, actions
 
 
+# noinspection DuplicatedCode
 def _plot_helper_test(s_in, save_dir, term):
     l_term = term.lower().replace(' ', '_')
     # Get value counts.
@@ -158,6 +159,7 @@ def _plot_helper_test(s_in, save_dir, term):
     plt.close(fig)
 
 
+# noinspection DuplicatedCode
 def _test_reward_hist(s_in, save_dir):
     # Initialize figure.
     fig, ax = plt.subplots()
@@ -204,55 +206,6 @@ def _test_action_hist(s_in, save_dir):
     fig.savefig(os.path.join(save_dir, 'test_action_hist.png'), format='png')
     fig.savefig(os.path.join(save_dir, 'test_action_hist.eps'), format='eps')
     plt.close(fig)
-
-
-def add_value_labels(ax, spacing=5):
-    """Add labels to the end of each bar in a bar chart.
-
-    Arguments:
-        ax (matplotlib.axes.Axes): The matplotlib object containing the axes
-            of the plot to annotate.
-        spacing (int): The distance between the labels and the bars.
-
-    Source: https://stackoverflow.com/a/48372659/11052174
-    """
-
-    # For each bar: Place a label
-    for rect in ax.patches:
-        # Get X and Y placement of label from rect.
-        y_value = rect.get_height()
-        x_value = rect.get_x() + rect.get_width() / 2
-
-        # Number of points between bar and label. Change to your liking.
-        space = spacing
-        # Vertical alignment for positive values
-        va = 'bottom'
-
-        # If value of bar is negative: Place label below bar
-        if y_value < 0:
-            # Invert space to place label below
-            space *= -1
-            # Vertically align label at top
-            va = 'top'
-
-        # Use Y value as label and format number with two decimal places
-        label = "{:.2f}".format(y_value)
-
-        # Create annotation
-        ax.annotate(
-            # Use `label` as label
-            label,
-            # Place label at end of the bar
-            (x_value, y_value),
-            # Place label at end of the bar
-            xytext=(0, space),
-            # Interpret `xytext` as offset in points
-            textcoords="offset points",
-            # Horizontally center label
-            ha='center',
-            # Vertically align label differently for positive and
-            # negative values.
-            va=va)
 
 
 def _get_success_series(df_in):
