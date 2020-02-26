@@ -28,20 +28,23 @@ def loop(in_dir):
     mean_reward_arr = np.zeros_like(pct_success_arr)
     num_test_actions_arr = np.zeros_like(pct_success_arr)
     time_arr = np.zeros_like(pct_success_arr)
+    oob_arr = np.zeros_like(pct_success_arr)
 
     for i, this_d in enumerate(sub_dirs):
-        pct_success, oob_success, mean_reward, num_test_actions, train_time =\
-            main(os.path.join(DATA_DIR, in_dir, this_d))
+        pct_success, oob_success, mean_reward, num_test_actions, train_time,\
+            pct_oob = main(os.path.join(DATA_DIR, in_dir, this_d))
 
         pct_success_arr[i] = pct_success
         oob_success_arr[i] = oob_success
         mean_reward_arr[i] = mean_reward
         num_test_actions_arr[i] = num_test_actions
         time_arr[i] = train_time
+        oob_arr[i] = pct_oob
 
     df = pd.DataFrame({'Success Percentage': pct_success_arr,
                        'Success Percentage Start OOB': oob_success_arr,
                        'Mean Reward': mean_reward_arr,
+                       'Percentage of Episodes Start OOB': oob_arr,
                        'Num Test Actions': num_test_actions_arr,
                        'Training time': time_arr})
     df.to_csv(os.path.join(in_dir, 'summary.csv'))
@@ -324,6 +327,8 @@ def main(run_dir):
     # Compute success for episodes which started out of bounds
     oob_success = (success_series[start_oob_series.to_numpy()].sum()
                    / start_oob_series.sum())
+    # Compute percentage of episodes which started out of bounds.
+    pct_ep_oob = start_oob_series.to_numpy().sum() / success_series.shape[0]
     assert success_series.shape[0] == TEST_EPISODES
     assert start_oob_series.shape[0] == TEST_EPISODES
 
@@ -360,7 +365,7 @@ def main(run_dir):
     # Return percent success, mean reward, and num unique testing
     # actions. Subtract one since we have np.nan in there for actions.
     return pct_success, oob_success, test_rewards.mean()[0],\
-        test_actions.shape[0] - 1, train_time
+        test_actions.shape[0] - 1, train_time, pct_ep_oob
 
 
 if __name__ == '__main__':
