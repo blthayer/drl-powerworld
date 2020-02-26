@@ -361,7 +361,7 @@ if __name__ == '__main__':
              f'{NUM_RUNS_DEFAULT}) will be run in series.')
     args_in = parser.parse_args()
     main(case_str=args_in.case, env_name=args_in.env, random=args_in.random,
-         mod=args_in.mod, clipped_r=args_in.clipped_r, seed=args_in.seed)
+         mod=args_in.mod, clipped_r=args_in.clipped, seed=args_in.seed)
     # Random:
     # main(case_str='14', random=True, mod=False,
     #      env_name='powerworld-discrete-env-simple-14-bus-v0',
