@@ -74,7 +74,7 @@ def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
                    callback, policy, case, max_load_factor,
                    min_load_factor, lead_pf_probability,
                    load_on_probability, mod_learn, v_truncate, case_str,
-                   scale_v_obs, clipped_r, gamma):
+                   scale_v_obs, clipped_r, gamma, load_model_dir):
     """Use this function to take a shot at replicating the GridMind
     paper: https://arxiv.org/abs/1904.10597
 
@@ -86,7 +86,8 @@ def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
     image_dir = os.path.join(out_dir, 'images')
     train_logfile = os.path.join(out_dir, 'log_train.csv')
     test_logfile = os.path.join(out_dir, 'log_test.csv')
-    model_file = os.path.join(out_dir, 'gridmind_reproduce.pkl')
+    model_file_ = 'gridmind_reproduce.pkl'
+    model_file = os.path.join(out_dir, model_file_)
     info_file = os.path.join(out_dir, 'info.txt')
 
     # Get a copy of the default inputs.
@@ -169,19 +170,38 @@ def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
     print('*' * 120)
     print('*' * 120)
 
-    # Get a copy of the default inputs for dqn.
-    init_dict = deepcopy(BASELINES_DICT)
-
     # Log inputs.
     env_dict.pop('dtype')
     with open(os.path.join(out_dir, 'env_input.json'), 'w') as f:
         json.dump(env_dict, f)
+
+    # Get a copy of the default inputs for dqn.
+    init_dict = deepcopy(BASELINES_DICT)
 
     # Overwrite seed and env
     init_dict['seed'] = seed
     init_dict['env'] = env
     init_dict['policy'] = policy
     init_dict['gamma'] = gamma
+
+    if load_model_dir is not None:
+        # If we're loading a model for additional training, overwrite
+        # the exploration/epsilon related parameters. Use 10% like
+        # the Google folks did.
+        # https://storage.googleapis.com/deepmind-media/dqn/DQNNaturePaper.pdf
+        init_dict['exploration_fraction'] = 1.0
+        init_dict['exploration_final_eps'] = 0.1
+        init_dict['exploration_initial_eps'] = 0.1
+
+        # During the initial training beta was annealed. So, set it
+        # to 1 since we'll be loading a pre-trained model and
+        # essentially just want to continue training.
+        init_dict['prioritized_replay_beta0'] = 1.0
+
+        # Ensure the replay buffer is full before beginning training.
+        # This is just another thing to "act like" training is simply
+        # continuing from where we left off.
+        init_dict['learning_starts'] = init_dict['buffer_size']
 
     # Initialize.
     if mod_learn:
@@ -190,6 +210,10 @@ def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
             model = DQNUniqueActions(**init_dict)
     else:
         model = DQN(**init_dict)
+
+    if load_model_dir is not None:
+        # Load up the pre-trained model.
+        model.load_parameters(os.path.join(load_model_dir, model_file_))
 
     # Log inputs.
     init_dict.pop('policy')
@@ -236,28 +260,40 @@ def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
         env.scenario_idx = env.num_scenarios - TEST_EPISODES - 1
 
     if mod_learn:
-        test_loop_mod(env, model)
+        success = test_loop_mod(env, model)
     else:
-        test_loop(env, model)
+        success = test_loop(env, model)
 
     # Close the environment (which will flush the log).
     env.close()
 
+    print('*' * 80)
+    pct = success.sum() / success.shape[0] * 100
+    print(f'All done. Percentage success in testing: {pct:.2f}')
+    print('*' * 80)
+
 
 def test_loop(env, model):
-    for _ in range(TEST_EPISODES):
+    success = np.zeros(TEST_EPISODES)
+    for i in range(TEST_EPISODES):
         obs = env.reset()
         done = False
 
         while not done:
             # env.render()
-            obs, rew, done, _ = \
+            obs, rew, done, info = \
                 env.step(model.predict(obs, deterministic=True)[0])
+
+        # noinspection PyUnboundLocalVariable
+        success[i] = info['is_success']
+
+    return success
 
 
 def test_loop_mod(env, model):
     action_list = list()
-    for _ in range(TEST_EPISODES):
+    success = np.zeros(TEST_EPISODES)
+    for i in range(TEST_EPISODES):
         # Get the environment ready.
         obs = env.reset()
         done = False
@@ -276,14 +312,19 @@ def test_loop_mod(env, model):
             action_list.append(action)
 
             # Take the step.
-            obs, rew, done, _ = env.step(action)
+            obs, rew, done, info = env.step(action)
+
+        # noinspection PyUnboundLocalVariable
+        success[i] = info['is_success']
+
+    return success
 
 
 def loop(out_dir, env_name, runs, hidden_list, num_scenarios,
          avg_reward, num_time_steps, case, min_load_factor,
          max_load_factor, lead_pf_probability, load_on_probability,
          mod_learn, v_truncate, case_str, scale_v_obs, clipped_r, gamma,
-         seed):
+         seed, load_model_dir):
     """Run the gridmind_reproduce function in a loop."""
     base_dir = os.path.join(DATA_DIR, out_dir)
 
@@ -343,7 +384,7 @@ def loop(out_dir, env_name, runs, hidden_list, num_scenarios,
             load_on_probability=load_on_probability,
             max_load_factor=max_load_factor, mod_learn=mod_learn,
             v_truncate=v_truncate, case_str=case_str, scale_v_obs=scale_v_obs,
-            clipped_r=clipped_r, gamma=gamma
+            clipped_r=clipped_r, gamma=gamma, load_model_dir=load_model_dir
         )
 
 
@@ -411,6 +452,9 @@ if __name__ == '__main__':
         help=('Only pass a seed if you want to perform a single run with the '
               'given seed. Otherwise, let num_runs handle the seeding in the '
               'loop.'))
+    parser.add_argument(
+        '--load_model_dir', type=str, default=None,
+        help=f'Directory in {DATA_DIR} to load pre-trained model from.')
 
     # Parse the arguments.
     args_in = parser.parse_args()
@@ -441,4 +485,4 @@ if __name__ == '__main__':
          mod_learn=args_in.mod_learn, v_truncate=args_in.v_truncate,
          case_str=case_str_, scale_v_obs=args_in.scale_v_obs,
          clipped_r=args_in.clipped_r, gamma=args_in.gamma,
-         seed=args_in.seed)
+         seed=args_in.seed, load_model_dir=args_in.load_model_dir)
