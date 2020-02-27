@@ -218,9 +218,13 @@ class GraphAgent:
         self.starting_action_num_1025 = \
             self.env.num_gen_reg_buses * (self.env.gen_bins.shape[0] - 2) + 1
 
+        # Get the shunt actions.
+        if self.shunt_buses is not None:
+            self.starting_action_num_shunts = \
+                1 + self.env.gen_action_array.shape[0]
+
         # The following will be configured in the init_episode method.
         self.gens_on: Union[np.ndarray, None] = None
-        self.shunts_on: Union[np.ndarray, None] = None
         self.graph: Union[nx.Graph, None] = None
         self.distance_indices = []
         self.prev_bus_num = None
@@ -230,8 +234,6 @@ class GraphAgent:
     def init_episode(self):
         """Perform initialization work required for an episode."""
         self.gens_on = self.gen_buses[self.env.gen_bus_status_arr]
-        if self.shunt_buses is not None:
-            self.shunts_on = self.shunt_buses[self.env.shunt_status_arr]
         self.graph = self.get_network_graph()
         self.distance_indices.clear()
         self.prev_bus_num = None
@@ -273,6 +275,59 @@ class GraphAgent:
             # We should never get here.
             return 0
 
+        # If this case has shunts, see if there's an eligible shunt
+        # action to take first.
+        if self.shunt_buses is not None:
+            action = self._get_shunt_action(
+                bus=bus, action_list=action_list, low_flag=low_flag)
+        else:
+            action = self.env.no_op_action
+
+        # If we didn't get a shunt action, find a generator action.
+        if action == self.env.no_op_action:
+            action = self._get_gen_action(
+                bus=bus, v=v, starting_action_num=starting_action_num,
+                action_list=action_list)
+
+        return action
+
+    def _get_shunt_action(self, bus, action_list, low_flag):
+        # Get a listing of this bus and its neighbors.
+        bus_arr = np.array([n for n in self.graph.neighbors(bus)] + [bus])
+
+        # Get a mask indicating if the buses have shunts.
+        shunt_mask = np.isin(self.shunt_buses, bus_arr)
+
+        if shunt_mask.any():
+            # Loop through valid shunts.
+            # TODO: It would be "better" to toggle the shunt with the
+            #   shortest electrical distance, but I think this will
+            #   work well enough.
+            for shunt_idx in np.arange(self.shunt_buses.shape[0])[shunt_mask]:
+                # If voltage is low and the shunt is open or voltage is
+                # high and the shunt is closed, we'll take the action
+                # corresponding to toggling the shunt at the bus.
+                # Recall that closed corresponds to a state of 1, and
+                # open corresponds to a state of 0.
+                state = self.env.shunt_status_arr[shunt_idx]
+                if ((state == 1) and (not low_flag)) \
+                        or ((state == 0) and low_flag):
+                    # Compute the action.
+                    action = self.starting_action_num_shunts + shunt_idx
+
+                    # If this action has already been taken, continue.
+                    # Otherwise, return it.
+                    if action in action_list:
+                        continue
+                    else:
+                        return action
+
+        # If we're here, either there are no shunts within one hop of
+        # this bus or we've already taken all the shunt actions. Do
+        # nothing with shunts.
+        return self.env.no_op_action
+
+    def _get_gen_action(self, bus, v, starting_action_num, action_list):
         # Get electrical distances from the bus to each generator (reactance
         # only). Skip if we're looking at the same bus.
         if bus == self.prev_bus_num:
@@ -301,7 +356,7 @@ class GraphAgent:
 
         # Loop to determine a valid action. Initialize
         # to the no-op action.
-        action = 0
+        action = self.env.no_op_action
         for idx in distances_argsort:
             # Skip this generator if the distance is infinite.
             if np.isinf(distances[idx]):
