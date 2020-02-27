@@ -158,10 +158,14 @@ def main(case_str, random, mod, env_name, clipped_r, seed):
                             action = get_random_action(env)
 
                 else:
-                    # Use the graph technique to get an action.
+                    # Use the graph technique to get an action. Note
+                    # that we're not going to use the observation
+                    # returned by the environment, and instead use the
+                    # raw per unit voltages.
                     # noinspection PyUnboundLocalVariable
                     action = get_graph_action(
-                        env=env, graph=graph, obs=obs, gens_on=gens_on,
+                        env=env, graph=graph, obs=env.bus_pu_volt_arr,
+                        gens_on=gens_on,
                         starting_action_num_105=starting_action_num_105,
                         starting_action_num_1025=starting_action_num_1025,
                         action_list=action_list
