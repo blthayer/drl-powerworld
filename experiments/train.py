@@ -213,7 +213,8 @@ def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
 
     if load_model_dir is not None:
         # Load up the pre-trained model.
-        model.load_parameters(os.path.join(load_model_dir, model_file_))
+        model.load_parameters(os.path.join(DATA_DIR, load_model_dir,
+                                           model_file_))
 
     # Log inputs.
     init_dict.pop('policy')
