@@ -3,9 +3,9 @@
 # https://www.tensorflow.org/install/pip
 tensorflow-gpu>=1.15, <2.0
 # Simply use the latest gym from PyPi. Include atari for testing.
-gym[atari]
-numpy
-pandas>=0.24
-matplotlib
-stable-baselines
-networkx
+gym[atari] == 0.15.4
+numpy == 1.18.1
+pandas == 1.0.0
+matplotlib == 3.1.2
+stable-baselines == 2.9.0
+networkx == 2.4
