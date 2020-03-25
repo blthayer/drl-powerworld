@@ -404,7 +404,8 @@ if __name__ == '__main__':
             'powerworld-discrete-env-branch-state-14-bus-v0',
             'powerworld-discrete-env-branch-and-gen-state-14-bus-v0',
             'powerworld-discrete-env-gen-shunt-no-contingencies-v0',
-            'powerworld-discrete-env-gen-branch-shunt-v0'
+            'powerworld-discrete-env-gen-branch-shunt-v0',
+            'powerworld-discrete-env-genvarfrac-branch-shunt-v0'
         ])
     
     parser.add_argument(
