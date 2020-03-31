@@ -74,7 +74,8 @@ def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
                    callback, policy, case, max_load_factor,
                    min_load_factor, lead_pf_probability,
                    load_on_probability, mod_learn, v_truncate, case_str,
-                   scale_v_obs, clipped_r, gamma, load_model_dir):
+                   scale_v_obs, clipped_r, gamma, load_model_dir,
+                   no_op_flag):
     """Use this function to take a shot at replicating the GridMind
     paper: https://arxiv.org/abs/1904.10597
 
@@ -107,6 +108,7 @@ def learn_and_test(out_dir, seed, env_name, num_scenarios, num_time_steps,
     env_dict['truncate_voltages'] = v_truncate
     env_dict['scale_voltage_obs'] = scale_v_obs
     env_dict['clipped_reward'] = clipped_r
+    env_dict['no_op_flag'] = no_op_flag
 
     # Initialize the environment.
     env = gym.make(env_name, **env_dict)
@@ -325,7 +327,7 @@ def loop(out_dir, env_name, runs, hidden_list, num_scenarios,
          avg_reward, num_time_steps, case, min_load_factor,
          max_load_factor, lead_pf_probability, load_on_probability,
          mod_learn, v_truncate, case_str, scale_v_obs, clipped_r, gamma,
-         seed, load_model_dir):
+         seed, load_model_dir, no_op_flag):
     """Run the gridmind_reproduce function in a loop."""
     base_dir = os.path.join(DATA_DIR, out_dir)
 
@@ -385,7 +387,8 @@ def loop(out_dir, env_name, runs, hidden_list, num_scenarios,
             load_on_probability=load_on_probability,
             max_load_factor=max_load_factor, mod_learn=mod_learn,
             v_truncate=v_truncate, case_str=case_str, scale_v_obs=scale_v_obs,
-            clipped_r=clipped_r, gamma=gamma, load_model_dir=load_model_dir
+            clipped_r=clipped_r, gamma=gamma, load_model_dir=load_model_dir,
+            no_op_flag=no_op_flag
         )
 
 
@@ -448,6 +451,10 @@ if __name__ == '__main__':
     parser.add_argument('--v_truncate', action='store_true')
     parser.add_argument('--scale_v_obs', action='store_true')
     parser.add_argument('--clipped_r', action='store_true')
+    parser.add_argument(
+        '--no_op_flag', action='store_true',
+        help='Use this flag to cause the no-op action to result in a reward of'
+        ' 0.0 and episode termination.')
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument(
         '--seed', type=int, default=None,
@@ -487,4 +494,5 @@ if __name__ == '__main__':
          mod_learn=args_in.mod_learn, v_truncate=args_in.v_truncate,
          case_str=case_str_, scale_v_obs=args_in.scale_v_obs,
          clipped_r=args_in.clipped_r, gamma=args_in.gamma,
-         seed=args_in.seed, load_model_dir=args_in.load_model_dir)
+         seed=args_in.seed, load_model_dir=args_in.load_model_dir,
+         no_op_flag=args_in.no_op_flag)
